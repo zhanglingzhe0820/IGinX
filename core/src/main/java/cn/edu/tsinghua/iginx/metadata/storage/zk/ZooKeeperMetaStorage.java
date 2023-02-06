@@ -130,7 +130,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
 
     private static final String MAX_ACTIVE_END_TIME_STATISTICS_NODE_PREFIX = "/statistics/end/time/active/max";
 
-    private static final String CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX = "/fragment/customizable/replica";
+    private static final String CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX = "/fragments/customizable/replica";
 
     private static final String RESHARD_STATUS_NODE_PREFIX = "/status/reshard";
 
@@ -2202,7 +2202,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             Map<FragmentMeta, List<FragmentMeta>> fragmentListMap = new HashMap<>();
             if (this.client.checkExists().forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX) == null) {
                 // 当前还没有数据，创建父节点，然后不需要解析数据
-                this.client.create().withMode(CreateMode.PERSISTENT).forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX);
+                this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT).forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX);
             } else {
                 List<String> tsIntervalNames = this.client.getChildren().forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX);
                 for (String tsIntervalName : tsIntervalNames) {

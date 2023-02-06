@@ -3,50 +3,48 @@ package cn.edu.tsinghua.iginx.engine.shared.operator;
 import cn.edu.tsinghua.iginx.engine.shared.source.GlobalSource;
 import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
+
+import java.util.ArrayList;
 import java.util.List;
 
 public class Migration extends AbstractUnaryOperator {
 
-  private final long sourceStorageEngineId;
-  private final long targetStorageEngineId;
-  private final FragmentMeta fragmentMeta;
-  private final List<String> paths;
-  private final StorageUnitMeta targetStorageUnitMeta;
+    private final FragmentMeta fragmentMeta;
+    private final List<String> paths;
+    private final List<StorageUnitMeta> targetReplicaStorageUnitMetaList;
 
-  public Migration(GlobalSource source, long sourceStorageEngineId, long targetStorageEngineId,
-      FragmentMeta fragmentMeta,
-      List<String> paths, StorageUnitMeta targetStorageUnitMeta) {
-    super(OperatorType.Migration, source);
-    this.sourceStorageEngineId = sourceStorageEngineId;
-    this.targetStorageEngineId = targetStorageEngineId;
-    this.fragmentMeta = fragmentMeta;
-    this.paths = paths;
-    this.targetStorageUnitMeta = targetStorageUnitMeta;
-  }
+    public Migration(GlobalSource source, FragmentMeta fragmentMeta,
+                     List<String> paths, StorageUnitMeta storageUnitMeta) {
+        super(OperatorType.Migration, source);
+        this.fragmentMeta = fragmentMeta;
+        this.paths = paths;
+        List<StorageUnitMeta> storageUnitMetaList = new ArrayList<>();
+        storageUnitMetaList.add(storageUnitMeta);
+        this.targetReplicaStorageUnitMetaList = storageUnitMetaList;
+    }
 
-  public long getSourceStorageEngineId() {
-    return sourceStorageEngineId;
-  }
+    public Migration(GlobalSource source, FragmentMeta fragmentMeta,
+                     List<String> paths, List<StorageUnitMeta> targetReplicaStorageUnitMetaList) {
+        super(OperatorType.Migration, source);
+        this.fragmentMeta = fragmentMeta;
+        this.paths = paths;
+        this.targetReplicaStorageUnitMetaList = targetReplicaStorageUnitMetaList;
+    }
 
-  public long getTargetStorageEngineId() {
-    return targetStorageEngineId;
-  }
+    public FragmentMeta getFragmentMeta() {
+        return fragmentMeta;
+    }
 
-  public FragmentMeta getFragmentMeta() {
-    return fragmentMeta;
-  }
+    public List<StorageUnitMeta> getTargetReplicaStorageUnitMetaList() {
+        return targetReplicaStorageUnitMetaList;
+    }
 
-  public StorageUnitMeta getTargetStorageUnitMeta() {
-    return targetStorageUnitMeta;
-  }
+    public List<String> getPaths() {
+        return paths;
+    }
 
-  public List<String> getPaths() {
-    return paths;
-  }
-
-  @Override
-  public Operator copy() {
-    return new Migration((GlobalSource) getSource().copy(), sourceStorageEngineId,
-        targetStorageEngineId, fragmentMeta, paths, targetStorageUnitMeta);
-  }
+    @Override
+    public Operator copy() {
+        return new Migration((GlobalSource) getSource().copy(), fragmentMeta, paths, targetReplicaStorageUnitMetaList);
+    }
 }

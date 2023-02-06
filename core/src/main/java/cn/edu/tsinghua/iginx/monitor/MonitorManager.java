@@ -103,13 +103,13 @@ public class MonitorManager implements Runnable {
     while (true) {
       try {
         //清空节点信息
-        logger.error("start to clear monitors");
+//        logger.error("start to clear monitors");
         metaManager.clearMonitors();
-        logger.error("end clear monitors");
+//        logger.error("end clear monitors");
         Thread.sleep(interval * 1000L);
-        logger.error("allRequests = {}", StoragePhysicalTaskExecutor.getInstance().allRequests);
-        logger.error("submittedRequests = {}", StoragePhysicalTaskExecutor.getInstance().submittedRequests);
-        logger.error("completedRequests = {}", StoragePhysicalTaskExecutor.getInstance().completedRequests);
+//        logger.error("allRequests = {}", StoragePhysicalTaskExecutor.getInstance().allRequests);
+//        logger.error("submittedRequests = {}", StoragePhysicalTaskExecutor.getInstance().submittedRequests);
+//        logger.error("completedRequests = {}", StoragePhysicalTaskExecutor.getInstance().completedRequests);
 
         //发起负载均衡判断
         DefaultMetaManager.getInstance().executeReshardJudging();
@@ -118,23 +118,23 @@ public class MonitorManager implements Runnable {
                 .getReadRequestsMap());
 
         long totalWriteRequests = 0;
-        logger.error("start to print all requests of each fragments");
+//        logger.error("start to print all requests of each fragments");
         Map<FragmentMeta, Long> writeRequestsMap = RequestsMonitor.getInstance()
             .getWriteRequestsMap();
         for (Entry<FragmentMeta, Long> requestsOfEachFragment : writeRequestsMap
             .entrySet()) {
           totalWriteRequests += requestsOfEachFragment.getValue();
-          logger.error("fragment requests: {} = {}", requestsOfEachFragment.getKey().toString(),
-              requestsOfEachFragment.getValue());
+//          logger.error("fragment requests: {} = {}", requestsOfEachFragment.getKey().toString(),
+//              requestsOfEachFragment.getValue());
         }
-        logger.error("end print all requests of each fragments");
-        logger.error("total write requests: {}", totalWriteRequests);
+//        logger.error("end print all requests of each fragments");
+//        logger.error("total write requests: {}", totalWriteRequests);
 
         metaManager.submitMaxActiveEndTime();
         Map<FragmentMeta, Long> writeHotspotMap = HotSpotMonitor.getInstance().getWriteHotspotMap();
         Map<FragmentMeta, Long> readHotspotMap = HotSpotMonitor.getInstance().getReadHotspotMap();
-        logger.error("writeHotspotMap = {}", writeHotspotMap);
-        logger.error("readHotspotMap = {}", readHotspotMap);
+//        logger.error("writeHotspotMap = {}", writeHotspotMap);
+//        logger.error("readHotspotMap = {}", readHotspotMap);
         metaManager.updateFragmentHeat(writeHotspotMap, readHotspotMap);
         //等待收集完成
 //        int waitTime = 0;
@@ -148,7 +148,7 @@ public class MonitorManager implements Runnable {
 //          }
 //        }
         Thread.sleep(1000);
-        logger.error("start to load fragments heat");
+//        logger.error("start to load fragments heat");
         //集中信息（初版主要是统计分区热度）
         Pair<Map<FragmentMeta, Long>, Map<FragmentMeta, Long>> fragmentHeatPair = metaManager
             .loadFragmentHeat();
@@ -160,50 +160,50 @@ public class MonitorManager implements Runnable {
         if (fragmentHeatReadMap == null) {
           fragmentHeatReadMap = new HashMap<>();
         }
-        logger.error("start to load fragments points");
+//        logger.error("start to load fragments points");
         Map<FragmentMeta, Long> fragmentMetaPointsMap = metaManager.loadFragmentPoints();
-        logger.error("start to load fragment of each node");
+//        logger.error("start to load fragment of each node");
         Map<Long, List<FragmentMeta>> fragmentOfEachNode = loadFragmentOfEachNode(
             fragmentHeatWriteMap, fragmentHeatReadMap);
 
         long totalHeats = 0;
         long maxHeat = 0;
         long minHeat = Long.MAX_VALUE;
-        logger.error("start to print all fragments of each node");
+//        logger.error("start to print all fragments of each node");
         for (Entry<Long, List<FragmentMeta>> fragmentOfEachNodeEntry : fragmentOfEachNode
             .entrySet()) {
           long heat = 0;
           long requests = 0;
           List<FragmentMeta> fragmentMetas = fragmentOfEachNodeEntry.getValue();
           for (FragmentMeta fragmentMeta : fragmentMetas) {
-            logger.error("fragment: {}", fragmentMeta.toString());
-            logger.error("fragment heat write: {} = {}", fragmentMeta,
-                fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L));
+//            logger.error("fragment: {}", fragmentMeta.toString());
+//            logger.error("fragment heat write: {} = {}", fragmentMeta,
+//                fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L));
             heat += fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
-            logger.error("fragment heat read: {} = {}", fragmentMeta,
-                fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
+//            logger.error("fragment heat read: {} = {}", fragmentMeta,
+//                fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
             heat += fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
             requests += writeRequestsMap.getOrDefault(fragmentMeta, 0L);
           }
-          logger.error("heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
-          logger.error("requests of node {} : {}", fragmentOfEachNodeEntry.getKey(), requests);
+//          logger.error("heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
+//          logger.error("requests of node {} : {}", fragmentOfEachNodeEntry.getKey(), requests);
 
           totalHeats += heat;
           maxHeat = Math.max(maxHeat, heat);
           minHeat = Math.min(minHeat, heat);
         }
-        logger.error("end print all fragments of each node");
+//        logger.error("end print all fragments of each node");
         double averageHeats = totalHeats * 1.0 / fragmentOfEachNode.size();
 
         if (((1 - unbalanceThreshold) * averageHeats >= minHeat
             || (1 + unbalanceThreshold) * averageHeats <= maxHeat)) {
-          logger.error("start to execute reshard");
+//          logger.error("start to execute reshard");
           if (DefaultMetaManager.getInstance().executeReshard()) {
             //发起负载均衡
             policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
                 fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
           } else {
-            logger.error("execute reshard failed");
+//            logger.error("execute reshard failed");
           }
         }
       } catch (Exception e) {

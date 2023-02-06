@@ -5,6 +5,7 @@ import cn.edu.tsinghua.iginx.engine.physical.exception.PhysicalException;
 import cn.edu.tsinghua.iginx.engine.physical.task.TaskExecuteResult;
 import cn.edu.tsinghua.iginx.engine.shared.data.read.Field;
 import cn.edu.tsinghua.iginx.engine.shared.operator.OperatorType;
+import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,10 +21,15 @@ public class TimeseriesMonitor implements IMonitor {
             .isEnableMonitor();
     private boolean isStartTimeseriesMonitor = false;
     private final Map<String, Long> timeseriesLoadMap = new ConcurrentHashMap<>(); // 时间序列->总负载
+    private FragmentMeta targetFragmentMeta = null;
     private static final TimeseriesMonitor instance = new TimeseriesMonitor();
 
     public static TimeseriesMonitor getInstance() {
         return instance;
+    }
+
+    public void setTargetFragmentMeta(FragmentMeta targetFragmentMeta) {
+        this.targetFragmentMeta = targetFragmentMeta;
     }
 
     public void start() {
@@ -40,7 +46,7 @@ public class TimeseriesMonitor implements IMonitor {
 
     public void recordAfter(long taskId, TaskExecuteResult result, OperatorType operatorType) {
         try {
-            if (isEnableMonitor && isStartTimeseriesMonitor && operatorType == OperatorType.Project && result.getRowStream().hasNext()) {
+            if (isEnableMonitor && isStartTimeseriesMonitor && operatorType == OperatorType.Project && result != null && result.getRowStream() != null && result.getRowStream().hasNext()) {
                 // 构建本次访问的timeseries列表
                 List<String> timeseriesList = new ArrayList<>();
                 for (Field field : result.getRowStream().getHeader().getFields()) {
@@ -50,8 +56,10 @@ public class TimeseriesMonitor implements IMonitor {
                 long duration = (System.nanoTime() - taskId) / 1000000;
                 long averageLoad = duration / timeseriesList.size(); //这里认为范围负载被所有时间序列均分
                 for (String timeseries : timeseriesList) {
-                    long load = timeseriesLoadMap.getOrDefault(timeseries, 0L);
-                    timeseriesLoadMap.put(timeseries, averageLoad + load);
+                    if (targetFragmentMeta.getTsInterval().isContain(timeseries)) {
+                        long load = timeseriesLoadMap.getOrDefault(timeseries, 0L);
+                        timeseriesLoadMap.put(timeseries, averageLoad + load);
+                    }
                 }
             }
         } catch (PhysicalException e) {

@@ -132,8 +132,7 @@ public class StoragePhysicalTaskExecutor {
                             submittedRequests.incrementAndGet();
                             try {
                                 // 如果是查询请求，可能有可配置化副本，随机发送到任何一个副本上
-                                Operator op = task.getOperators().get(0);
-                                if (op.getType() == OperatorType.Project) {
+                                if (!task.getOperators().isEmpty() && task.getOperators().get(0).getType() == OperatorType.Project) {
                                     FragmentMeta fragment = task.getTargetFragment();
                                     if (fragment != null) {
                                         List<FragmentMeta> fragmentMetas = DefaultMetaCache.getInstance().getCustomizableReplicaFragmentList(fragment);
@@ -145,7 +144,7 @@ public class StoragePhysicalTaskExecutor {
                                 }
                                 result = pair.k.execute(task);
                             } catch (Exception e) {
-                                logger.error("execute task error: " + e);
+                                logger.error("execute task error: ", e);
                                 result = new TaskExecuteResult(new PhysicalException(e));
                             }
                             completedRequests.incrementAndGet();

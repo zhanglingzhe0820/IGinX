@@ -716,10 +716,17 @@ public class DefaultMetaManager implements IMetaManager {
             TimeSeriesInterval sourceTsInterval = new TimeSeriesInterval(
                     fragmentMeta.getTsInterval().getStartTimeSeries(),
                     fragmentMeta.getTsInterval().getEndTimeSeries());
-            cache.deleteFragmentByTsInterval(fragmentMeta.getTsInterval(), fragmentMeta);
-            fragmentMeta.getTsInterval().setEndTimeSeries(endTimeSeries);
-            cache.addFragment(fragmentMeta);
-            storage.updateFragmentByTsInterval(sourceTsInterval, fragmentMeta);
+            // 要从序列维度结束fragment必须保证所有相同序列的fragment都被结束
+            // 必须要复制一遍列表，原列表会被修改
+            List<FragmentMeta> fragmentMetas = new ArrayList<>(cache.getFragmentMapByExactTimeSeriesInterval(sourceTsInterval));
+            for (FragmentMeta subFragmentMeta : fragmentMetas) {
+                cache.deleteFragmentByTsInterval(fragmentMeta.getTsInterval(), subFragmentMeta);
+            }
+            for (FragmentMeta subFragmentMeta : fragmentMetas) {
+                subFragmentMeta.getTsInterval().setEndTimeSeries(endTimeSeries);
+                cache.addFragment(subFragmentMeta);
+                storage.updateFragmentByTsInterval(sourceTsInterval, subFragmentMeta);
+            }
         } catch (MetaStorageException e) {
             logger.error("end fragment by time series interval error: ", e);
         } finally {

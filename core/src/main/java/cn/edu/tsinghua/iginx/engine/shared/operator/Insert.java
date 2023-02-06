@@ -3,6 +3,8 @@ package cn.edu.tsinghua.iginx.engine.shared.operator;
 import cn.edu.tsinghua.iginx.engine.shared.data.write.DataView;
 import cn.edu.tsinghua.iginx.engine.shared.source.FragmentSource;
 
+import java.util.Random;
+
 public class Insert extends AbstractUnaryOperator {
 
     private final DataView data;

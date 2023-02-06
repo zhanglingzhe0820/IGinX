@@ -255,7 +255,6 @@ public class DynamicPolicy implements IPolicy {
             Map<Long, List<FragmentMeta>> nodeFragmentMap,
             Map<FragmentMeta, Long> fragmentWriteLoadMap, Map<FragmentMeta, Long> fragmentReadLoadMap,
             List<Long> toScaleInNodes) {
-        logger.error("start to execute executeReshardAndMigration");
         MigrationLogger migrationLogger = new MigrationLogger();
         MigrationManager.getInstance().getMigration().setMigrationLogger(migrationLogger);
 
@@ -318,13 +317,14 @@ public class DynamicPolicy implements IPolicy {
                 maxReadLoad = load;
             }
         }
+        logger.error("fragmentWriteLoadMap = {}", fragmentWriteLoadMap);
+        logger.error("fragmentReadLoadMap = {}", fragmentReadLoadMap);
         if (maxWriteLoadFragment != null || maxReadLoadFragment != null) {
             if (maxLoad < Math.max(maxWriteLoad, maxReadLoad)) {
                 if (maxWriteLoad >= maxReadLoad) {
                     executeTimeseriesReshard(maxWriteLoadFragment,
                             fragmentMetaPointsMap.get(maxWriteLoadFragment), nodeLoadMap, true);
                 } else {
-                    logger.error("fragmentMetaPointsMap = {}", fragmentMetaPointsMap);
                     if (fragmentMetaPointsMap.containsKey(maxReadLoadFragment)) {
                         executeTimeseriesReshard(maxReadLoadFragment,
                                 fragmentMetaPointsMap.get(maxReadLoadFragment), nodeLoadMap, false);
@@ -359,6 +359,10 @@ public class DynamicPolicy implements IPolicy {
         List<MigrationTask> migrationTasks = new ArrayList<>();
         for (int i = 0; i < totalFragmentNum; i++) {
             FragmentMeta fragmentMeta = allFragmentMetas[i];
+            // 有可配置化副本的分片不能迁移
+            if (!DefaultMetaManager.getInstance().getCustomizableReplicaFragmentList(fragmentMeta).isEmpty()) {
+                continue;
+            }
             for (int j = 0; j < allNodes.length; j++) {
                 // 只找迁移的源节点
                 if (m[i][j] == 0) {
@@ -416,17 +420,19 @@ public class DynamicPolicy implements IPolicy {
     private void executeTimeseriesReshard(FragmentMeta fragmentMeta, long points,
                                           Map<Long, Long> storageHeat, boolean isWrite) {
         try {
+            if (!DefaultMetaManager.getInstance().getCustomizableReplicaFragmentList(fragmentMeta).isEmpty()) {
+                logger.error("customizable replica fragment cannot be reshard");
+                return;
+            }
             // 如果是写入则不需要考虑可定制化副本的情况
             if (isWrite) {
                 MigrationManager.getInstance().getMigration()
                         .reshardWriteByTimeseries(fragmentMeta, points);
             } else {
-                logger.error("start to collect timeseries");
+                TimeseriesMonitor.getInstance().setTargetFragmentMeta(fragmentMeta);
                 TimeseriesMonitor.getInstance().start();
                 Thread.sleep(timeseriesloadBalanceCheckInterval * 1000L);
                 TimeseriesMonitor.getInstance().stop();
-                logger.error("end collect timeseries");
-                logger.error("timeseriesLoadMap = {}", TimeseriesMonitor.getInstance().getTimeseriesLoadMap());
                 metaManager.updateTimeseriesHeat(TimeseriesMonitor.getInstance().getTimeseriesLoadMap());
                 //等待收集完成
                 while (!metaManager.isAllTimeseriesMonitorsCompleteCollection()) {
@@ -434,7 +440,6 @@ public class DynamicPolicy implements IPolicy {
                 }
                 long totalHeat = 0L;
                 Map<String, Long> timeseriesHeat = metaManager.loadTimeseriesHeat();
-                logger.error("timeseriesHeat = {}", timeseriesHeat);
                 for (Entry<String, Long> timeseriesHeatEntry : timeseriesHeat.entrySet()) {
                     totalHeat += timeseriesHeatEntry.getValue();
                 }
@@ -448,18 +453,14 @@ public class DynamicPolicy implements IPolicy {
                     }
                 }
 
-                MigrationManager.getInstance().getMigration()
-                        .reshardQueryByTimeseries(fragmentMeta, timeseriesHeat, points);
-//                if (overLoadTimeseriesMap.size() > 0
-//                        && fragmentMeta.getTimeInterval().getEndTime() != Long.MAX_VALUE && !isWrite) {
-//                    logger.error("start to reshard by customizable replica");
-//                    MigrationManager.getInstance().getMigration()
-//                            .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
-//                                    overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);
-//                } else {
-//                    MigrationManager.getInstance().getMigration()
-//                            .reshardQueryByTimeseries(fragmentMeta, timeseriesHeat, points);
-//                }
+                if (overLoadTimeseriesMap.size() > 0 && !isWrite) {
+                    MigrationManager.getInstance().getMigration()
+                            .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
+                                    overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);
+                } else {
+                    MigrationManager.getInstance().getMigration()
+                            .reshardQueryByTimeseries(fragmentMeta, timeseriesHeat, points);
+                }
             }
         } catch (Exception e) {
             logger.error("execute timeseries reshard failed :", e);
