@@ -33,6 +33,7 @@ public class StoragePhysicalTask extends AbstractPhysicalTask {
     private String storageUnit;
     private long storage;
     private boolean dummyStorageUnit;
+    private boolean isMigration;
 
     public StoragePhysicalTask(List<Operator> operators) {
         this(operators, ((FragmentSource) ((UnaryOperator) operators.get(0)).getSource()).getFragment(), true, false);
@@ -87,6 +88,14 @@ public class StoragePhysicalTask extends AbstractPhysicalTask {
 
     public boolean isNeedBroadcasting() {
         return needBroadcasting;
+    }
+
+    public boolean isMigration() {
+        return isMigration;
+    }
+
+    public void setMigration(boolean migration) {
+        isMigration = migration;
     }
 
     @Override

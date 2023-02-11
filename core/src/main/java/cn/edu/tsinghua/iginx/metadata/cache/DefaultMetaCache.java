@@ -48,7 +48,7 @@ public class DefaultMetaCache implements IMetaCache {
 
     private final Map<TimeSeriesInterval, List<FragmentMeta>> fragmentMetaListMap;
 
-    private final Map<FragmentMeta, List<FragmentMeta>> customizableReplicaFragmentMetaList;
+    public final Map<FragmentMeta, List<FragmentMeta>> customizableReplicaFragmentMetaList;
 
     private final List<FragmentMeta> dummyFragments;
 
@@ -500,13 +500,12 @@ public class DefaultMetaCache implements IMetaCache {
 
     @Override
     public List<FragmentMeta> getCustomizableReplicaFragmentList(FragmentMeta sourceFragment) {
-        List<FragmentMeta> fragmentMetas = new ArrayList<>();
-        for (Map.Entry<FragmentMeta, List<FragmentMeta>> entry : customizableReplicaFragmentMetaList.entrySet()) {
+         for (Map.Entry<FragmentMeta, List<FragmentMeta>> entry : customizableReplicaFragmentMetaList.entrySet()) {
             if (entry.getKey().equals(sourceFragment)) {
-                fragmentMetas = entry.getValue();
+                return entry.getValue();
             }
         }
-        return fragmentMetas;
+        return new ArrayList<>();
     }
 
     @Override

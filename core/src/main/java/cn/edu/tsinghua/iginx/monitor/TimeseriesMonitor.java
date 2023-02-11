@@ -70,5 +70,6 @@ public class TimeseriesMonitor implements IMonitor {
     @Override
     public void clear() {
         timeseriesLoadMap.clear();
+        targetFragmentMeta = null;
     }
 }

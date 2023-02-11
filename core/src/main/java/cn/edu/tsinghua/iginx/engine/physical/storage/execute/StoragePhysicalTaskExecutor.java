@@ -138,7 +138,10 @@ public class StoragePhysicalTaskExecutor {
                                         List<FragmentMeta> fragmentMetas = DefaultMetaCache.getInstance().getCustomizableReplicaFragmentList(fragment);
                                         if (!fragmentMetas.isEmpty()) {
                                             int randomIndex = new Random().nextInt(fragmentMetas.size());
+                                            logger.error("query hit fragment = {}", fragmentMetas.get(randomIndex));
                                             task.setTargetFragment(fragmentMetas.get(randomIndex));
+                                        } else {
+                                            logger.error("query is not hit fragment = {}", fragment);
                                         }
                                     }
                                 }
@@ -149,13 +152,15 @@ public class StoragePhysicalTaskExecutor {
                             }
                             completedRequests.incrementAndGet();
                             try {
-                                HotSpotMonitor.getInstance()
-                                        .recordAfter(taskId, task.getTargetFragment(),
-                                                task.getOperators().get(0).getType());
-                                TimeseriesMonitor.getInstance().recordAfter(taskId, result,
-                                        task.getOperators().get(0).getType());
-                                RequestsMonitor.getInstance()
-                                        .record(task.getTargetFragment(), task.getOperators().get(0));
+                                if(!task.isMigration()){
+                                    HotSpotMonitor.getInstance()
+                                            .recordAfter(taskId, task.getTargetFragment(),
+                                                    task.getOperators().get(0).getType());
+                                    TimeseriesMonitor.getInstance().recordAfter(taskId, result,
+                                            task.getOperators().get(0).getType());
+                                    RequestsMonitor.getInstance()
+                                            .record(task.getTargetFragment(), task.getOperators().get(0));
+                                }
                             } catch (Exception e) {
                                 logger.error("Monitor catch error:", e);
                             }

@@ -41,6 +41,7 @@ import cn.edu.tsinghua.iginx.migration.recover.MigrationExecuteType;
 import cn.edu.tsinghua.iginx.migration.recover.MigrationLoggerAnalyzer;
 import cn.edu.tsinghua.iginx.monitor.HotSpotMonitor;
 import cn.edu.tsinghua.iginx.monitor.RequestsMonitor;
+import cn.edu.tsinghua.iginx.monitor.TimeseriesMonitor;
 import cn.edu.tsinghua.iginx.policy.simple.TimeSeriesCalDO;
 import cn.edu.tsinghua.iginx.sql.statement.InsertStatement;
 import cn.edu.tsinghua.iginx.thrift.AuthType;
@@ -1287,6 +1288,7 @@ public class DefaultMetaManager implements IMetaManager {
             }
             HotSpotMonitor.getInstance().clear();
             RequestsMonitor.getInstance().clear();
+            TimeseriesMonitor.getInstance().clear();
 //      storage.resetMonitorClearCounter();
         } catch (Exception e) {
             logger.error("encounter error when clear monitors: ", e);

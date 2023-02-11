@@ -68,6 +68,7 @@ public class SimulationBasedMigrationPolicy extends MigrationPolicy {
     while (!isAllQueueEmpty(migrationTaskQueueList)) {
       executeOneRoundMigration(migrationTaskQueueList, nodeLoadMap);
     }
+    executor.shutdown();
 
     logger.info("complete all migration task with time consumption: {} ms",
         System.currentTimeMillis() - startTime);

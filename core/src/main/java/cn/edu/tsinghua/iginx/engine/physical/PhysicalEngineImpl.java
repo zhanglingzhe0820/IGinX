@@ -104,6 +104,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 Project project = new Project(new FragmentSource(toMigrateFragment), paths, null);
                 projectOperators.add(project);
                 StoragePhysicalTask projectPhysicalTask = new StoragePhysicalTask(projectOperators);
+                projectPhysicalTask.setMigration(true);
 
                 List<Operator> selectOperators = new ArrayList<>();
                 List<Filter> selectTimeFilters = new ArrayList<>();
@@ -207,6 +208,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
             Insert insert = new Insert(new FragmentSource(toMigrateFragment), rowDataView);
             insertOperators.add(insert);
             StoragePhysicalTask insertPhysicalTask = new StoragePhysicalTask(insertOperators);
+            insertPhysicalTask.setMigration(true);
             storageTaskExecutor.commitWithTargetStorageUnitId(insertPhysicalTask, storageUnitId);
             TaskExecuteResult insertResult = insertPhysicalTask.getResult();
             if (insertResult.getException() != null) {

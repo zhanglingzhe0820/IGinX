@@ -37,7 +37,9 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 import org.slf4j.Logger;
 
@@ -76,8 +78,14 @@ public abstract class MigrationPolicy {
      */
     public void reshardByCustomizableReplica(FragmentMeta fragmentMeta,
                                              Map<String, Long> timeseriesLoadMap, Set<String> overLoadTimeseries, long totalLoad,
-                                             long points, Map<Long, Long> storageHeat) throws MetaStorageException, PhysicalException {
+                                             long points, Map<Long, Long> storageHeat) {
         try {
+            if (!DefaultMetaManager.getInstance().getCustomizableReplicaFragmentList(fragmentMeta).isEmpty()) {
+                logger.error("customizable replica fragment cannot be reshard");
+                return;
+            } else {
+                logger.error("customizableReplicaFragmentMetaList = {}", DefaultMetaCache.getInstance().customizableReplicaFragmentMetaList);
+            }
             migrationLogger.logMigrationExecuteTaskStart(
                     new MigrationExecuteTask(fragmentMeta, fragmentMeta.getMasterStorageUnitId(), 0L, 0L,
                             MigrationExecuteType.RESHARD_TIME_SERIES));
@@ -198,69 +206,103 @@ public abstract class MigrationPolicy {
             storageHeat.remove(fragmentMeta.getMasterStorageUnit().getStorageEngineId());
             List<Entry<Long, Long>> storageHeatEntryList = new ArrayList<>(storageHeat.entrySet());
             storageHeatEntryList.sort(Entry.comparingByValue());
+            logger.error("customizable replica reshard fragments = {}", fakedFragmentMetas);
 
             // 开始实际切分片
-            double currAverageLoad = totalLoad * 1.0 / fakedFragmentMetaLoads.size();
-            for (int i = 0; i < fakedFragmentMetas.size(); i++) {
-                FragmentMeta targetFragmentMeta = fakedFragmentMetas.get(i);
-                if (i == 0) {
-                    DefaultMetaManager.getInstance().endFragmentByTimeSeriesInterval(fragmentMeta,
-                            targetFragmentMeta.getTsInterval().getEndTimeSeries());
-                    DefaultMetaManager.getInstance().updateFragmentPoints(fragmentMeta, points / fakedFragmentMetas.size());
-                } else {
-                    FragmentMeta newFragment = new FragmentMeta(
-                            targetFragmentMeta.getTsInterval().getStartTimeSeries(),
-                            targetFragmentMeta.getTsInterval().getEndTimeSeries(),
-                            fragmentMeta.getTimeInterval().getStartTime(),
-                            fragmentMeta.getTimeInterval().getEndTime(), fragmentMeta.getMasterStorageUnit());
-                    DefaultMetaManager.getInstance().addFragment(newFragment);
-                    DefaultMetaManager.getInstance().updateFragmentPoints(newFragment, points / fakedFragmentMetas.size());
-                }
-                // 开始拷贝副本，有一个先决条件，时间分区必须为闭区间，即只有查询请求，在之后不会被再写入数据，也不会被拆分读写
-                if (fakedFragmentMetaLoads.get(i) >= currAverageLoad * (1
-                        + maxTimeseriesLoadBalanceThreshold)) {
-                    // 最多每个节点一个副本
-                    int replicas = Math.min((int) (fakedFragmentMetaLoads.get(i) / currAverageLoad), storageHeatEntryList.size());
-                    List<FragmentMeta> replicaFragmentMetas = new ArrayList<>();
-                    replicaFragmentMetas.add(targetFragmentMeta);
-                    List<StorageUnitMeta> targetReplicaStorageUnitMetaList = new ArrayList<>();
-                    for (int num = 1; num < replicas; num++) {
-                        long targetStorageId = storageHeatEntryList.get(num).getKey();
-                        StorageUnitMeta newStorageUnitMeta = DefaultMetaManager.getInstance()
-                                .generateNewStorageUnitMetaByFragment(fragmentMeta, targetStorageId);
-                        targetReplicaStorageUnitMetaList.add(newStorageUnitMeta);
+            if (fakedFragmentMetas.size() == 1) {
+                // 如果只有一个分片，则必然要拷贝这个分片
+                FragmentMeta targetFragmentMeta = fakedFragmentMetas.get(0);
+                int replicas = storageHeatEntryList.size();
+                makeReplicaOfTargetFragment(replicas, targetFragmentMeta, storageHeatEntryList);
+            } else {
+                double currAverageLoad = totalLoad * 1.0 / fakedFragmentMetaLoads.size();
+                boolean isReplica = false;
+                for (int i = 0; i < fakedFragmentMetas.size(); i++) {
+                    FragmentMeta targetFragmentMeta = fakedFragmentMetas.get(i);
+                    if (i == 0) {
+                        DefaultMetaManager.getInstance().endFragmentByTimeSeriesInterval(fragmentMeta,
+                                targetFragmentMeta.getTsInterval().getEndTimeSeries());
+                        DefaultMetaManager.getInstance().updateFragmentPoints(fragmentMeta, points / fakedFragmentMetas.size());
+                    } else {
                         FragmentMeta newFragment = new FragmentMeta(
                                 targetFragmentMeta.getTsInterval().getStartTimeSeries(),
                                 targetFragmentMeta.getTsInterval().getEndTimeSeries(),
                                 fragmentMeta.getTimeInterval().getStartTime(),
-                                fragmentMeta.getTimeInterval().getEndTime(), newStorageUnitMeta);
-                        replicaFragmentMetas.add(newFragment);
+                                fragmentMeta.getTimeInterval().getEndTime(), fragmentMeta.getMasterStorageUnit());
+                        DefaultMetaManager.getInstance().addFragment(newFragment);
+                        DefaultMetaManager.getInstance().updateFragmentPoints(newFragment, points / fakedFragmentMetas.size());
                     }
-                    // 开始拷贝数据
-                    Set<String> pathRegexSet = new HashSet<>();
-                    ShowTimeSeries showTimeSeries = new ShowTimeSeries(new GlobalSource(),
-                            pathRegexSet, null, Integer.MAX_VALUE, 0);
-                    RowStream rowStream = physicalEngine.execute(showTimeSeries);
-                    SortedSet<String> pathSet = new TreeSet<>();
-                    while (rowStream.hasNext()) {
-                        Row row = rowStream.next();
-                        String timeSeries = new String((byte[]) row.getValue(0));
-                        if (timeSeries.contains("{") && timeSeries.contains("}")) {
-                            timeSeries = timeSeries.split("\\{")[0];
-                        }
-                        if (fragmentMeta.getTsInterval().isContain(timeSeries)) {
-                            pathSet.add(timeSeries);
+                    // 开始拷贝副本，有一个先决条件，时间分区必须为闭区间，即只有查询请求，在之后不会被再写入数据，也不会被拆分读写
+                    if (fakedFragmentMetaLoads.get(i) >= currAverageLoad * (1
+                            + maxTimeseriesLoadBalanceThreshold)) {
+                        isReplica = true;
+                        // 最多每个节点一个副本
+                        int replicas = Math.min((int) (fakedFragmentMetaLoads.get(i) / currAverageLoad), storageHeatEntryList.size());
+                        makeReplicaOfTargetFragment(replicas, targetFragmentMeta, storageHeatEntryList);
+                    }
+                }
+                // 如果一个副本都没拷贝，则拷贝负载最高的一个
+                if (!isReplica) {
+                    FragmentMeta targetFragmentMeta = null;
+                    long maxHeat = 0;
+                    for (int i = 0; i < fakedFragmentMetas.size(); i++) {
+                        if (fakedFragmentMetaLoads.get(i) > maxHeat) {
+                            maxHeat = fakedFragmentMetaLoads.get(i);
+                            targetFragmentMeta = fakedFragmentMetas.get(i);
                         }
                     }
-                    Migration migration = new Migration(new GlobalSource(), fragmentMeta, new ArrayList<>(pathSet), targetReplicaStorageUnitMetaList);
-                    physicalEngine.execute(migration);
-                    DefaultMetaManager.getInstance().addCustomizableReplicaFragmentMeta(targetFragmentMeta, replicaFragmentMetas);
+                    if (targetFragmentMeta != null) {
+                        int replicas = storageHeatEntryList.size();
+                        makeReplicaOfTargetFragment(replicas, targetFragmentMeta, storageHeatEntryList);
+                    }
                 }
             }
-            logger.error("complete all");
+        } catch (Exception e) {
+            logger.error("execute replica fragment error ", e);
         } finally {
             migrationLogger.logMigrationExecuteTaskEnd();
         }
+        logger.error("end execute replica fragment");
+    }
+
+    private void makeReplicaOfTargetFragment(int replicas, FragmentMeta targetFragmentMeta, List<Entry<Long, Long>> storageHeatEntryList) throws PhysicalException, MetaStorageException {
+        List<FragmentMeta> replicaFragmentMetas = new ArrayList<>();
+        replicaFragmentMetas.add(targetFragmentMeta);
+        List<StorageUnitMeta> targetReplicaStorageUnitMetaList = new ArrayList<>();
+        for (int num = 0; num < replicas; num++) {
+            long targetStorageId = storageHeatEntryList.get(num).getKey();
+            StorageUnitMeta newStorageUnitMeta = DefaultMetaManager.getInstance()
+                    .generateNewStorageUnitMetaByFragment(targetFragmentMeta, targetStorageId);
+            targetReplicaStorageUnitMetaList.add(newStorageUnitMeta);
+            FragmentMeta newFragment = new FragmentMeta(
+                    targetFragmentMeta.getTsInterval().getStartTimeSeries(),
+                    targetFragmentMeta.getTsInterval().getEndTimeSeries(),
+                    targetFragmentMeta.getTimeInterval().getStartTime(),
+                    targetFragmentMeta.getTimeInterval().getEndTime(), newStorageUnitMeta);
+            replicaFragmentMetas.add(newFragment);
+        }
+        logger.error("targetReplicaStorageUnitMetaList = {}", targetReplicaStorageUnitMetaList);
+        // 开始拷贝数据
+        Set<String> pathRegexSet = new HashSet<>();
+        ShowTimeSeries showTimeSeries = new ShowTimeSeries(new GlobalSource(),
+                pathRegexSet, null, Integer.MAX_VALUE, 0);
+        RowStream rowStream = physicalEngine.execute(showTimeSeries);
+        SortedSet<String> pathSet = new TreeSet<>();
+        while (rowStream.hasNext()) {
+            Row row = rowStream.next();
+            String timeSeries = new String((byte[]) row.getValue(0));
+            if (timeSeries.contains("{") && timeSeries.contains("}")) {
+                timeSeries = timeSeries.split("\\{")[0];
+            }
+            if (targetFragmentMeta.getTsInterval().isContain(timeSeries)) {
+                pathSet.add(timeSeries);
+            }
+        }
+        Migration migration = new Migration(new GlobalSource(), targetFragmentMeta, new ArrayList<>(pathSet), targetReplicaStorageUnitMetaList);
+        physicalEngine.execute(migration);
+        logger.error("complete execute migration");
+        DefaultMetaManager.getInstance().addCustomizableReplicaFragmentMeta(targetFragmentMeta, replicaFragmentMetas);
+        logger.error("complete addCustomizableReplicaFragmentMeta");
     }
 
     /**
@@ -319,8 +361,8 @@ public abstract class MigrationPolicy {
     /**
      * 在时间序列层面将分片在同一个du下分为两块（已知时间序列）
      */
-    public void reshardQueryByTimeseries(FragmentMeta fragmentMeta,
-                                         Map<String, Long> timeseriesLoadMap, long points) {
+    public boolean reshardQueryByTimeseries(FragmentMeta fragmentMeta,
+                                            Map<String, Long> timeseriesLoadMap, long points) {
         try {
             logger.error("reshard query by timeseries {}", fragmentMeta);
             migrationLogger.logMigrationExecuteTaskStart(
@@ -340,15 +382,17 @@ public abstract class MigrationPolicy {
                 }
             }
 
-            if (middleTimeseries == null){
-                return;
+            // 如果只有1或2条序列，则无法切分，考虑后面使用可定制化副本
+            if (middleTimeseries == null) {
+                return false;
             }
             if (fragmentMeta.getTsInterval().getStartTimeSeries().equals(middleTimeseries)) {
-                return;
+                return false;
             }
             if (fragmentMeta.getTsInterval().getEndTimeSeries() != null && fragmentMeta.getTsInterval().getEndTimeSeries().equals(middleTimeseries)) {
-                return;
+                return false;
             }
+            logger.error("migrate middle timeseries {}", middleTimeseries);
 
             TimeSeriesInterval sourceTsInterval = new TimeSeriesInterval(
                     fragmentMeta.getTsInterval().getStartTimeSeries(),
@@ -362,6 +406,7 @@ public abstract class MigrationPolicy {
             DefaultMetaManager.getInstance()
                     .endFragmentByTimeSeriesInterval(fragmentMeta, middleTimeseries);
             DefaultMetaManager.getInstance().updateFragmentPoints(fragmentMeta, points / 2);
+            return true;
         } finally {
             migrationLogger.logMigrationExecuteTaskEnd();
         }
@@ -426,7 +471,7 @@ public abstract class MigrationPolicy {
                 migrationTaskQueue.poll();
                 this.executor.submit(() -> {
                     this.logger.info("start migration: {}", migrationTask);
-                    //异步执行耗时的操作
+                    //异步执行 耗时的操作
                     if (migrationTask.getMigrationType() == MigrationType.QUERY) {
                         // 如果之前没切过分区，需要优先切一下分区
                         if (migrationTask.getFragmentMeta().getTimeInterval().getEndTime() == Long.MAX_VALUE) {
@@ -498,13 +543,13 @@ public abstract class MigrationPolicy {
             Migration migration = new Migration(new GlobalSource(), fragmentMeta, new ArrayList<>(pathSet), storageUnitMeta);
             physicalEngine.execute(migration);
             // 迁移完开始删除原数据
-            List<String> paths = new ArrayList<>();
-            paths.add(fragmentMeta.getMasterStorageUnitId() + "*");
-            List<TimeRange> timeRanges = new ArrayList<>();
-            timeRanges.add(new TimeRange(fragmentMeta.getTimeInterval().getStartTime(), true,
-                    fragmentMeta.getTimeInterval().getEndTime(), false));
-            Delete delete = new Delete(new FragmentSource(fragmentMeta), timeRanges, paths, null);
-            physicalEngine.execute(delete);
+//            List<String> paths = new ArrayList<>();
+//            paths.add(fragmentMeta.getMasterStorageUnitId() + "*");
+//            List<TimeRange> timeRanges = new ArrayList<>();
+//            timeRanges.add(new TimeRange(fragmentMeta.getTimeInterval().getStartTime(), true,
+//                    fragmentMeta.getTimeInterval().getEndTime(), false));
+//            Delete delete = new Delete(new FragmentSource(fragmentMeta), timeRanges, paths, null);
+//            physicalEngine.execute(delete);
         } catch (Exception e) {
             logger.error("encounter error when migrate data from {} to {} ", sourceStorageId,
                     targetStorageId, e);

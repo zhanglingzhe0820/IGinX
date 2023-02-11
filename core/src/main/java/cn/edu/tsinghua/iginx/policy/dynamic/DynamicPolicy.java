@@ -333,7 +333,6 @@ public class DynamicPolicy implements IPolicy {
                     }
                 }
                 logger.error("end execute timeseries reshard");
-                return;
             }
         }
 
@@ -407,7 +406,7 @@ public class DynamicPolicy implements IPolicy {
         }
         logger.error("start to print migration task:");
         for (MigrationTask migrationTask : migrationTasks) {
-            logger.error(migrationTask.toString());
+            logger.error("migration task: " + migrationTask.toString());
         }
         logger.error("end print migration task:");
 
@@ -439,7 +438,8 @@ public class DynamicPolicy implements IPolicy {
                     Thread.sleep(1000);
                 }
                 long totalHeat = 0L;
-                Map<String, Long> timeseriesHeat = metaManager.loadTimeseriesHeat();
+                // 这里需要根据timeseries提前sort
+                Map<String, Long> timeseriesHeat = new TreeMap<>(metaManager.loadTimeseriesHeat());
                 for (Entry<String, Long> timeseriesHeatEntry : timeseriesHeat.entrySet()) {
                     totalHeat += timeseriesHeatEntry.getValue();
                 }
@@ -453,13 +453,18 @@ public class DynamicPolicy implements IPolicy {
                     }
                 }
 
-                if (overLoadTimeseriesMap.size() > 0 && !isWrite) {
+                if (overLoadTimeseriesMap.size() > 0) {
                     MigrationManager.getInstance().getMigration()
                             .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
                                     overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);
                 } else {
-                    MigrationManager.getInstance().getMigration()
+                    boolean status = MigrationManager.getInstance().getMigration()
                             .reshardQueryByTimeseries(fragmentMeta, timeseriesHeat, points);
+                    if (!status) {
+                        MigrationManager.getInstance().getMigration()
+                                .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
+                                        overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);
+                    }
                 }
             }
         } catch (Exception e) {

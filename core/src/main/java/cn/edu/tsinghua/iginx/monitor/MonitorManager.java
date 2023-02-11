@@ -103,13 +103,8 @@ public class MonitorManager implements Runnable {
     while (true) {
       try {
         //清空节点信息
-//        logger.error("start to clear monitors");
         metaManager.clearMonitors();
-//        logger.error("end clear monitors");
         Thread.sleep(interval * 1000L);
-//        logger.error("allRequests = {}", StoragePhysicalTaskExecutor.getInstance().allRequests);
-//        logger.error("submittedRequests = {}", StoragePhysicalTaskExecutor.getInstance().submittedRequests);
-//        logger.error("completedRequests = {}", StoragePhysicalTaskExecutor.getInstance().completedRequests);
 
         //发起负载均衡判断
         DefaultMetaManager.getInstance().executeReshardJudging();
@@ -121,6 +116,8 @@ public class MonitorManager implements Runnable {
 //        logger.error("start to print all requests of each fragments");
         Map<FragmentMeta, Long> writeRequestsMap = RequestsMonitor.getInstance()
             .getWriteRequestsMap();
+        Map<FragmentMeta, Long> readRequestsMap = RequestsMonitor.getInstance()
+                .getReadRequestsMap();
         for (Entry<FragmentMeta, Long> requestsOfEachFragment : writeRequestsMap
             .entrySet()) {
           totalWriteRequests += requestsOfEachFragment.getValue();
@@ -133,20 +130,8 @@ public class MonitorManager implements Runnable {
         metaManager.submitMaxActiveEndTime();
         Map<FragmentMeta, Long> writeHotspotMap = HotSpotMonitor.getInstance().getWriteHotspotMap();
         Map<FragmentMeta, Long> readHotspotMap = HotSpotMonitor.getInstance().getReadHotspotMap();
-//        logger.error("writeHotspotMap = {}", writeHotspotMap);
-//        logger.error("readHotspotMap = {}", readHotspotMap);
         metaManager.updateFragmentHeat(writeHotspotMap, readHotspotMap);
         //等待收集完成
-//        int waitTime = 0;
-//        while (!metaManager.isAllMonitorsCompleteCollection()) {
-//          Thread.sleep(100);
-//          logger.error("waiting for complete");
-//          waitTime++;
-//          if (waitTime > 10) {
-//            logger.error("monitor collection wait time more than {} ms", waitTime * 100);
-//            break;
-//          }
-//        }
         Thread.sleep(1000);
 //        logger.error("start to load fragments heat");
         //集中信息（初版主要是统计分区热度）
@@ -184,9 +169,10 @@ public class MonitorManager implements Runnable {
 //                fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
             heat += fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
             requests += writeRequestsMap.getOrDefault(fragmentMeta, 0L);
+            requests += readRequestsMap.getOrDefault(fragmentMeta, 0L);
           }
-//          logger.error("heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
-//          logger.error("requests of node {} : {}", fragmentOfEachNodeEntry.getKey(), requests);
+          logger.error("heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
+          logger.error("requests of node {} : {}", fragmentOfEachNodeEntry.getKey(), requests);
 
           totalHeats += heat;
           maxHeat = Math.max(maxHeat, heat);
@@ -197,13 +183,13 @@ public class MonitorManager implements Runnable {
 
         if (((1 - unbalanceThreshold) * averageHeats >= minHeat
             || (1 + unbalanceThreshold) * averageHeats <= maxHeat)) {
-//          logger.error("start to execute reshard");
+          logger.info("start to execute reshard");
           if (DefaultMetaManager.getInstance().executeReshard()) {
             //发起负载均衡
             policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
                 fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
           } else {
-//            logger.error("execute reshard failed");
+            logger.info("execute reshard failed");
           }
         }
       } catch (Exception e) {
