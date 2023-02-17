@@ -5,13 +5,10 @@ import cn.edu.tsinghua.iginx.conf.ConfigDescriptor;
 import cn.edu.tsinghua.iginx.engine.physical.PhysicalEngine;
 import cn.edu.tsinghua.iginx.engine.physical.PhysicalEngineImpl;
 import cn.edu.tsinghua.iginx.engine.physical.exception.PhysicalException;
-import cn.edu.tsinghua.iginx.engine.shared.TimeRange;
 import cn.edu.tsinghua.iginx.engine.shared.data.read.Row;
 import cn.edu.tsinghua.iginx.engine.shared.data.read.RowStream;
-import cn.edu.tsinghua.iginx.engine.shared.operator.Delete;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Migration;
 import cn.edu.tsinghua.iginx.engine.shared.operator.ShowTimeSeries;
-import cn.edu.tsinghua.iginx.engine.shared.source.FragmentSource;
 import cn.edu.tsinghua.iginx.engine.shared.source.GlobalSource;
 import cn.edu.tsinghua.iginx.exceptions.MetaStorageException;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
@@ -37,9 +34,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 
 import org.slf4j.Logger;
 
@@ -298,7 +293,7 @@ public abstract class MigrationPolicy {
                 pathSet.add(timeSeries);
             }
         }
-        Migration migration = new Migration(new GlobalSource(), targetFragmentMeta, new ArrayList<>(pathSet), targetReplicaStorageUnitMetaList);
+        Migration migration = new Migration(new GlobalSource(), targetFragmentMeta, new ArrayList<>(pathSet), targetReplicaStorageUnitMetaList, false);
         physicalEngine.execute(migration);
         logger.error("complete execute migration");
         DefaultMetaManager.getInstance().addCustomizableReplicaFragmentMeta(targetFragmentMeta, replicaFragmentMetas);

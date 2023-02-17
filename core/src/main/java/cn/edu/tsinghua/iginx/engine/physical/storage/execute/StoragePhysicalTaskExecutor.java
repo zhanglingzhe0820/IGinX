@@ -141,7 +141,7 @@ public class StoragePhysicalTaskExecutor {
                                             logger.error("query hit fragment = {}", fragmentMetas.get(randomIndex));
                                             task.setTargetFragment(fragmentMetas.get(randomIndex));
                                         } else {
-                                            logger.error("query is not hit fragment = {}", fragment);
+//                                            logger.error("query is not hit fragment = {}", fragment);
                                         }
                                     }
                                 }

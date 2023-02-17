@@ -159,8 +159,8 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 }
                 insertDataByBatch(timestampList, valuesList, bitmapList, toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
 
-                // 设置分片现在所属的du，目标du唯一才能设置，否则迁移请求为拷贝数据请求，不需要设置
-                if (targetReplicaStorageUnitMetaList.size() == 1) {
+                // 设置分片现在所属的du
+                if (migration.isChangeStorageUnit()) {
                     toMigrateFragment.setMasterStorageUnit(targetReplicaStorageUnitMetaList.get(0));
                 }
                 return selectResult.getRowStream();

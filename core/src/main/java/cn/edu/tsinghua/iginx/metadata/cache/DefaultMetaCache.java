@@ -500,8 +500,9 @@ public class DefaultMetaCache implements IMetaCache {
 
     @Override
     public List<FragmentMeta> getCustomizableReplicaFragmentList(FragmentMeta sourceFragment) {
-         for (Map.Entry<FragmentMeta, List<FragmentMeta>> entry : customizableReplicaFragmentMetaList.entrySet()) {
-            if (entry.getKey().equals(sourceFragment)) {
+        for (Map.Entry<FragmentMeta, List<FragmentMeta>> entry : customizableReplicaFragmentMetaList.entrySet()) {
+            FragmentMeta fragmentMeta = entry.getKey();
+            if (fragmentMeta.getTsInterval().equals(sourceFragment.getTsInterval()) && fragmentMeta.getTimeInterval().getStartTime() == sourceFragment.getTimeInterval().getStartTime()) {
                 return entry.getValue();
             }
         }
