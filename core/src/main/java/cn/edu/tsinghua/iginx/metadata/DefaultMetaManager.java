@@ -117,6 +117,8 @@ public class DefaultMetaManager implements IMetaManager {
 
         try {
             initIginx();
+            initReshardStatus();
+            initReshardCounter();
             initStorageEngine();
             initStorageUnit();
             initFragment();
@@ -125,8 +127,6 @@ public class DefaultMetaManager implements IMetaManager {
             initUser();
             initTransform();
             initMaxActiveEndTimeStatistics();
-            initReshardStatus();
-            initReshardCounter();
             recover();
         } catch (MetaStorageException e) {
             logger.error("init meta manager error: ", e);
@@ -157,7 +157,7 @@ public class DefaultMetaManager implements IMetaManager {
             cache.addIginx(iginx);
         }
         IginxMeta iginx = new IginxMeta(0L, ConfigDescriptor.getInstance().getConfig().getIp(),
-                ConfigDescriptor.getInstance().getConfig().getPort(), null);
+            ConfigDescriptor.getInstance().getConfig().getPort(), null);
         id = storage.registerIginx(iginx);
         SnowFlakeUtils.init(id);
     }
@@ -281,7 +281,7 @@ public class DefaultMetaManager implements IMetaManager {
         storage.registerVersionChangeHook((version, num) -> {
             double sum = cache.getSumFromTimeSeries();
             Map<String, Double> timeseriesData = cache.getMaxValueFromTimeSeries().stream().
-                    collect(Collectors.toMap(TimeSeriesCalDO::getTimeSeries, TimeSeriesCalDO::getValue));
+                collect(Collectors.toMap(TimeSeriesCalDO::getTimeSeries, TimeSeriesCalDO::getValue));
             double countSum = timeseriesData.values().stream().mapToDouble(Double::doubleValue).sum();
             if (countSum > 1e-9) {
                 timeseriesData.forEach((k, v) -> timeseriesData.put(k, v / countSum * sum));
@@ -642,7 +642,7 @@ public class DefaultMetaManager implements IMetaManager {
             toAddStorageUnit.setCreatedBy(id);
             String actualName = storage.addStorageUnit();
             StorageUnitMeta actualMasterStorageUnit = toAddStorageUnit
-                    .renameStorageUnitMeta(actualName, actualName);
+                .renameStorageUnitMeta(actualName, actualName);
             cache.updateStorageUnit(actualMasterStorageUnit);
             for (StorageUnitHook hook : storageUnitHooks) {
                 hook.onChange(null, actualMasterStorageUnit);
@@ -652,7 +652,7 @@ public class DefaultMetaManager implements IMetaManager {
                 slaveStorageUnit.setCreatedBy(id);
                 String slaveActualName = storage.addStorageUnit();
                 StorageUnitMeta actualSlaveStorageUnit = slaveStorageUnit
-                        .renameStorageUnitMeta(slaveActualName, actualName);
+                    .renameStorageUnitMeta(slaveActualName, actualName);
                 actualMasterStorageUnit.addReplica(actualSlaveStorageUnit);
                 for (StorageUnitHook hook : storageUnitHooks) {
                     hook.onChange(null, actualSlaveStorageUnit);
@@ -664,7 +664,7 @@ public class DefaultMetaManager implements IMetaManager {
             // 结束旧分片
             cache.deleteFragmentByTsInterval(fragment.getTsInterval(), fragment);
             fragment = fragment
-                    .endFragmentMeta(toAddFragment.getTimeInterval().getStartTime());
+                .endFragmentMeta(toAddFragment.getTimeInterval().getStartTime());
             cache.addFragment(fragment);
             fragment.setUpdatedBy(id);
             storage.updateFragment(fragment);
@@ -715,8 +715,8 @@ public class DefaultMetaManager implements IMetaManager {
         try {
             storage.lockFragment();
             TimeSeriesInterval sourceTsInterval = new TimeSeriesInterval(
-                    fragmentMeta.getTsInterval().getStartTimeSeries(),
-                    fragmentMeta.getTsInterval().getEndTimeSeries());
+                fragmentMeta.getTsInterval().getStartTimeSeries(),
+                fragmentMeta.getTsInterval().getEndTimeSeries());
             // 要从序列维度结束fragment必须保证所有相同序列的fragment都被结束
             // 必须要复制一遍列表，原列表会被修改
             List<FragmentMeta> fragmentMetas = new ArrayList<>(cache.getFragmentMapByExactTimeSeriesInterval(sourceTsInterval));
@@ -883,7 +883,7 @@ public class DefaultMetaManager implements IMetaManager {
                                                                 long targetStorageId) throws MetaStorageException {
         String actualName = storage.addStorageUnit();
         StorageUnitMeta storageUnitMeta = new StorageUnitMeta(actualName, targetStorageId, actualName,
-                true, false);
+            true, false);
         storageUnitMeta.setCreatedBy(getIginxId());
 
         cache.updateStorageUnit(storageUnitMeta);
@@ -1417,10 +1417,10 @@ public class DefaultMetaManager implements IMetaManager {
             int updatedCounter = maxActiveEndTimeStatisticsCounter.incrementAndGet();
             if (isProposer) {
                 logger.info("iginx node {}(proposer) increment max active end time statistics counter {}",
-                        this.id, updatedCounter);
+                    this.id, updatedCounter);
             } else {
                 logger.info("iginx node {} increment max active end time statistics counter {}", this.id,
-                        updatedCounter);
+                    updatedCounter);
             }
         });
     }
@@ -1502,11 +1502,11 @@ public class DefaultMetaManager implements IMetaManager {
                 MigrationLoggerAnalyzer migrationLoggerAnalyzer = new MigrationLoggerAnalyzer();
                 migrationLoggerAnalyzer.analyze();
                 if (migrationLoggerAnalyzer.isStartMigration() && !migrationLoggerAnalyzer
-                        .isMigrationFinished() && !migrationLoggerAnalyzer
-                        .isLastMigrationExecuteTaskFinished()) {
+                    .isMigrationFinished() && !migrationLoggerAnalyzer
+                    .isLastMigrationExecuteTaskFinished()) {
                     MigrationExecuteTask migrationExecuteTask = migrationLoggerAnalyzer
-                            .getLastMigrationExecuteTask();
-                    if (migrationExecuteTask.getMigrationExecuteType() == MigrationExecuteType.MIGRATION) {
+                        .getLastMigrationExecuteTask();
+                    if (migrationExecuteTask != null && migrationExecuteTask.getMigrationExecuteType() == MigrationExecuteType.MIGRATION) {
                         FragmentMeta fragmentMeta = migrationExecuteTask.getFragmentMeta();
                         // 直接删除整个du
                         List<String> paths = new ArrayList<>();
@@ -1561,7 +1561,7 @@ public class DefaultMetaManager implements IMetaManager {
 
     public void updateMaxActiveEndTime(long endTime) {
         maxActiveEndTime.getAndUpdate(e -> Math.max(e, endTime
-                + ConfigDescriptor.getInstance().getConfig().getReshardFragmentTimeMargin() * 1000));
+            + ConfigDescriptor.getInstance().getConfig().getReshardFragmentTimeMargin() * 1000));
     }
 
     public long getMaxActiveEndTime() {

@@ -161,7 +161,7 @@ public final class FragmentMeta {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         FragmentMeta that = (FragmentMeta) o;
-        return Objects.equals(timeInterval, that.timeInterval) && Objects.equals(tsInterval, that.tsInterval);
+        return Objects.equals(timeInterval, that.timeInterval) && Objects.equals(tsInterval, that.tsInterval) && Objects.equals(masterStorageUnitId, that.masterStorageUnitId);
     }
 
     @Override

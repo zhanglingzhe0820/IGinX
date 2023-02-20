@@ -152,14 +152,14 @@ public class StoragePhysicalTaskExecutor {
                             }
                             completedRequests.incrementAndGet();
                             try {
-                                if(!task.isMigration()){
+                                if (!task.isMigration()) {
                                     HotSpotMonitor.getInstance()
-                                            .recordAfter(taskId, task.getTargetFragment(),
-                                                    task.getOperators().get(0).getType());
-                                    TimeseriesMonitor.getInstance().recordAfter(taskId, result,
+                                        .recordAfter(taskId, task.getTargetFragment(),
                                             task.getOperators().get(0).getType());
+                                    TimeseriesMonitor.getInstance().recordAfter(taskId, result,
+                                        task.getOperators().get(0).getType());
                                     RequestsMonitor.getInstance()
-                                            .record(task.getTargetFragment(), task.getOperators().get(0));
+                                        .record(task.getTargetFragment(), task.getOperators().get(0));
                                 }
                             } catch (Exception e) {
                                 logger.error("Monitor catch error:", e);
@@ -179,7 +179,7 @@ public class StoragePhysicalTaskExecutor {
                                 } else {
                                     StorageUnitMeta masterStorageUnit = task.getTargetFragment().getMasterStorageUnit();
                                     List<String> replicaIds = masterStorageUnit.getReplicas()
-                                            .stream().map(StorageUnitMeta::getId).collect(Collectors.toList());
+                                        .stream().map(StorageUnitMeta::getId).collect(Collectors.toList());
                                     replicaIds.add(masterStorageUnit.getId());
                                     for (String replicaId : replicaIds) {
                                         if (replicaId.equals(task.getStorageUnit())) {

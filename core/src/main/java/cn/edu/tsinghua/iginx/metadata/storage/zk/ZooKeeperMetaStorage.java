@@ -1809,23 +1809,16 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                         for (FragmentMeta fragmentMeta : fragmentMetas) {
                             if (fragmentMeta.getTimeInterval().getStartTime() == startTime) {
                                 List<String> storageUnitIds = client.getChildren().forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child + "/" + timeInterval);
-                                if (storageUnitIds.size() == 1) {
-                                    byte[] data = this.client.getData()
-                                            .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child + "/" + timeInterval + "/" + storageUnitIds.get(0));
-                                    long heat = JsonUtils.fromJson(data, Long.class);
-                                    readHotspotMap.put(fragmentMeta, heat);
-                                } else if (storageUnitIds.size() > 1) {
-                                    // 考虑可定制化副本
-                                    List<FragmentMeta> customizableReplicaFragmentList = cache.getCustomizableReplicaFragmentList(fragmentMeta);
-                                    for (String storageUnitIdStr : storageUnitIds) {
-                                        long storageUnitId = Long.parseLong(storageUnitIdStr);
-                                        for (FragmentMeta customizableReplicaFragment : customizableReplicaFragmentList) {
-                                            if (customizableReplicaFragment.getMasterStorageUnit().getStorageEngineId() == storageUnitId) {
-                                                byte[] data = this.client.getData()
-                                                        .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child + "/" + timeInterval + "/" + storageUnitIdStr);
-                                                long heat = JsonUtils.fromJson(data, Long.class);
-                                                readHotspotMap.put(fragmentMeta, heat);
-                                            }
+                                // 考虑可定制化副本
+                                List<FragmentMeta> customizableReplicaFragmentList = cache.getCustomizableReplicaFragmentList(fragmentMeta);
+                                for (String storageUnitIdStr : storageUnitIds) {
+                                    long storageUnitId = Long.parseLong(storageUnitIdStr);
+                                    for (FragmentMeta customizableReplicaFragment : customizableReplicaFragmentList) {
+                                        if (customizableReplicaFragment.getMasterStorageUnit().getStorageEngineId() == storageUnitId) {
+                                            byte[] data = this.client.getData()
+                                                .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child + "/" + timeInterval + "/" + storageUnitIdStr);
+                                            long heat = JsonUtils.fromJson(data, Long.class);
+                                            readHotspotMap.put(fragmentMeta, heat);
                                         }
                                     }
                                 }
@@ -2013,7 +2006,6 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 case NODE_UPDATED:
                     data = event.getData().getData();
                     status = JsonUtils.fromJson(data, ReshardStatus.class);
-                    logger.error("status = {}", status);
                     reshardStatusChangeHook.onChange(status);
                     break;
                 default:
