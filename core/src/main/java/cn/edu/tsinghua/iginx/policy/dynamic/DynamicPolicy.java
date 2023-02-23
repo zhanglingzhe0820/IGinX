@@ -35,11 +35,11 @@ public class DynamicPolicy implements IPolicy {
     private static final Config config = ConfigDescriptor.getInstance().getConfig();
     private static final Logger logger = LoggerFactory.getLogger(DynamicPolicy.class);
     private static final double unbalanceFinalStatusThreshold = config
-            .getUnbalanceFinalStatusThreshold();
+        .getUnbalanceFinalStatusThreshold();
     private static final int timeseriesloadBalanceCheckInterval = ConfigDescriptor.getInstance()
-            .getConfig().getTimeseriesloadBalanceCheckInterval();
+        .getConfig().getTimeseriesloadBalanceCheckInterval();
     private static final double maxTimeseriesLoadBalanceThreshold = ConfigDescriptor.getInstance()
-            .getConfig().getMaxTimeseriesLoadBalanceThreshold();
+        .getConfig().getMaxTimeseriesLoadBalanceThreshold();
 
     private final IMetaManager metaManager = DefaultMetaManager.getInstance();
 
@@ -75,15 +75,15 @@ public class DynamicPolicy implements IPolicy {
 
     @Override
     public Pair<List<FragmentMeta>, List<StorageUnitMeta>> generateInitialFragmentsAndStorageUnits(
-            DataStatement statement) {
+        DataStatement statement) {
         List<String> paths = Utils.getNonWildCardPaths(Utils.getPathListFromStatement(statement));
         TimeInterval timeInterval = new TimeInterval(0, Long.MAX_VALUE);
 
         if (ConfigDescriptor.getInstance().getConfig().getClients().indexOf(",") > 0) {
             Pair<Map<TimeSeriesInterval, List<FragmentMeta>>, List<StorageUnitMeta>> pair = generateInitialFragmentsAndStorageUnitsByClients(
-                    paths, timeInterval);
+                paths, timeInterval);
             return new Pair<>(pair.k.values().stream().flatMap(List::stream).collect(Collectors.toList()),
-                    pair.v);
+                pair.v);
         } else {
             return generateInitialFragmentsAndStorageUnitsDefault(paths, timeInterval);
         }
@@ -100,7 +100,7 @@ public class DynamicPolicy implements IPolicy {
      * tests
      */
     public Pair<Map<TimeSeriesInterval, List<FragmentMeta>>, List<StorageUnitMeta>> generateInitialFragmentsAndStorageUnitsByClients(
-            List<String> paths, TimeInterval timeInterval) {
+        List<String> paths, TimeInterval timeInterval) {
         Map<TimeSeriesInterval, List<FragmentMeta>> fragmentMap = new HashMap<>();
         List<StorageUnitMeta> storageUnitList = new ArrayList<>();
 
@@ -109,9 +109,9 @@ public class DynamicPolicy implements IPolicy {
 
         String[] clients = ConfigDescriptor.getInstance().getConfig().getClients().split(",");
         int instancesNumPerClient =
-                ConfigDescriptor.getInstance().getConfig().getInstancesNumPerClient() - 1;
+            ConfigDescriptor.getInstance().getConfig().getInstancesNumPerClient() - 1;
         int replicaNum = Math
-                .min(1 + ConfigDescriptor.getInstance().getConfig().getReplicaNum(), storageEngineNum);
+            .min(1 + ConfigDescriptor.getInstance().getConfig().getReplicaNum(), storageEngineNum);
         String[] prefixes = new String[clients.length * instancesNumPerClient];
         for (int i = 0; i < clients.length; i++) {
             for (int j = 0; j < instancesNumPerClient; j++) {
@@ -127,14 +127,14 @@ public class DynamicPolicy implements IPolicy {
             fragmentMetaList = new ArrayList<>();
             masterId = RandomStringUtils.randomAlphanumeric(16);
             storageUnit = new StorageUnitMeta(masterId,
-                    storageEngineList.get(i % storageEngineNum).getId(), masterId, true);
+                storageEngineList.get(i % storageEngineNum).getId(), masterId, true);
             for (int j = i + 1; j < i + replicaNum; j++) {
                 storageUnit.addReplica(new StorageUnitMeta(RandomStringUtils.randomAlphanumeric(16),
-                        storageEngineList.get(j % storageEngineNum).getId(), masterId, false));
+                    storageEngineList.get(j % storageEngineNum).getId(), masterId, false));
             }
             storageUnitList.add(storageUnit);
             fragmentMetaList
-                    .add(new FragmentMeta(prefixes[i], prefixes[i + 1], 0, Long.MAX_VALUE, masterId));
+                .add(new FragmentMeta(prefixes[i], prefixes[i + 1], 0, Long.MAX_VALUE, masterId));
             fragmentMap.put(new TimeSeriesInterval(prefixes[i], prefixes[i + 1]), fragmentMetaList);
         }
 
@@ -143,7 +143,7 @@ public class DynamicPolicy implements IPolicy {
         storageUnit = new StorageUnitMeta(masterId, storageEngineList.get(0).getId(), masterId, true);
         for (int i = 1; i < replicaNum; i++) {
             storageUnit.addReplica(new StorageUnitMeta(RandomStringUtils.randomAlphanumeric(16),
-                    storageEngineList.get(i).getId(), masterId, false));
+                storageEngineList.get(i).getId(), masterId, false));
         }
         storageUnitList.add(storageUnit);
         fragmentMetaList.add(new FragmentMeta(null, prefixes[0], 0, Long.MAX_VALUE, masterId));
@@ -152,18 +152,18 @@ public class DynamicPolicy implements IPolicy {
         fragmentMetaList = new ArrayList<>();
         masterId = RandomStringUtils.randomAlphanumeric(16);
         storageUnit = new StorageUnitMeta(masterId, storageEngineList.get(storageEngineNum - 1).getId(),
-                masterId, true);
+            masterId, true);
         for (int i = 1; i < replicaNum; i++) {
             storageUnit.addReplica(new StorageUnitMeta(RandomStringUtils.randomAlphanumeric(16),
-                    storageEngineList.get(storageEngineNum - 1 - i).getId(), masterId, false));
+                storageEngineList.get(storageEngineNum - 1 - i).getId(), masterId, false));
         }
         storageUnitList.add(storageUnit);
         fragmentMetaList.add(
-                new FragmentMeta(prefixes[clients.length * instancesNumPerClient - 1], null, 0,
-                        Long.MAX_VALUE, masterId));
+            new FragmentMeta(prefixes[clients.length * instancesNumPerClient - 1], null, 0,
+                Long.MAX_VALUE, masterId));
         fragmentMap
-                .put(new TimeSeriesInterval(prefixes[clients.length * instancesNumPerClient - 1], null),
-                        fragmentMetaList);
+            .put(new TimeSeriesInterval(prefixes[clients.length * instancesNumPerClient - 1], null),
+                fragmentMetaList);
 
         return new Pair<>(fragmentMap, storageUnitList);
     }
@@ -218,16 +218,16 @@ public class DynamicPolicy implements IPolicy {
 
     @Override
     public Pair<FragmentMeta, StorageUnitMeta> generateFragmentAndStorageUnitByTimeSeriesIntervalAndTimeInterval(
-            String startPath, String endPath, long startTime, long endTime,
-            List<Long> storageEngineList) {
+        String startPath, String endPath, long startTime, long endTime,
+        List<Long> storageEngineList) {
         String masterId = RandomStringUtils.randomAlphanumeric(16);
         StorageUnitMeta storageUnit = new StorageUnitMeta(masterId, storageEngineList.get(0), masterId,
-                true, false);
+            true, false);
         FragmentMeta fragment = new FragmentMeta(startPath, endPath, startTime, endTime, masterId);
         for (int i = 1; i < storageEngineList.size(); i++) {
             storageUnit.addReplica(
-                    new StorageUnitMeta(RandomStringUtils.randomAlphanumeric(16), storageEngineList.get(i),
-                            masterId, false, false));
+                new StorageUnitMeta(RandomStringUtils.randomAlphanumeric(16), storageEngineList.get(i),
+                    masterId, false, false));
         }
         return new Pair<>(fragment, storageUnit);
     }
@@ -251,10 +251,10 @@ public class DynamicPolicy implements IPolicy {
 
     @Override
     public void executeReshardAndMigration(
-            Map<FragmentMeta, Long> fragmentMetaPointsMap,
-            Map<Long, List<FragmentMeta>> nodeFragmentMap,
-            Map<FragmentMeta, Long> fragmentWriteLoadMap, Map<FragmentMeta, Long> fragmentReadLoadMap,
-            List<Long> toScaleInNodes) {
+        Map<FragmentMeta, Long> fragmentMetaPointsMap,
+        Map<Long, List<FragmentMeta>> nodeFragmentMap,
+        Map<FragmentMeta, Long> fragmentWriteLoadMap, Map<FragmentMeta, Long> fragmentReadLoadMap,
+        List<Long> toScaleInNodes) {
         MigrationLogger migrationLogger = new MigrationLogger();
         MigrationManager.getInstance().getMigration().setMigrationLogger(migrationLogger);
 
@@ -323,11 +323,11 @@ public class DynamicPolicy implements IPolicy {
             if (maxLoad < Math.max(maxWriteLoad, maxReadLoad)) {
                 if (maxWriteLoad >= maxReadLoad) {
                     executeTimeseriesReshard(maxWriteLoadFragment,
-                            fragmentMetaPointsMap.get(maxWriteLoadFragment), nodeLoadMap, true);
+                        fragmentMetaPointsMap.get(maxWriteLoadFragment), nodeLoadMap, true);
                 } else {
                     if (fragmentMetaPointsMap.containsKey(maxReadLoadFragment)) {
                         executeTimeseriesReshard(maxReadLoadFragment,
-                                fragmentMetaPointsMap.get(maxReadLoadFragment), nodeLoadMap, false);
+                            fragmentMetaPointsMap.get(maxReadLoadFragment), nodeLoadMap, false);
                     } else {
                         logger.error("no {} in fragmentMetaPointsMap", maxReadLoadFragment);
                     }
@@ -338,8 +338,8 @@ public class DynamicPolicy implements IPolicy {
 
         logger.error("start to calculate migration final status");
         int[][][] migrationResults = calculateMigrationFinalStatus(totalHeat / nodeFragmentMap.size(),
-                fragmentMetaPointsMap, nodeFragmentMap, fragmentWriteLoadMap, fragmentReadLoadMap,
-                totalFragmentNum, m, toScaleInNodes);
+            fragmentMetaPointsMap, nodeFragmentMap, fragmentWriteLoadMap, fragmentReadLoadMap,
+            totalFragmentNum, m, toScaleInNodes);
         logger.error("end calculate migration final status");
 
         // 所有的分区
@@ -377,11 +377,11 @@ public class DynamicPolicy implements IPolicy {
                             continue;
                         }
                         migrationTasks.add(new MigrationTask(fragmentMeta,
-                                fragmentWriteLoadMap.getOrDefault(fragmentMeta, 0L),
-                                fragmentMetaPointsMap
-                                        .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
-                                allNodes[targetIndex],
-                                MigrationType.WRITE));
+                            fragmentWriteLoadMap.getOrDefault(fragmentMeta, 0L),
+                            fragmentMetaPointsMap
+                                .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
+                            allNodes[targetIndex],
+                            MigrationType.WRITE));
                     }
                     // 读要迁移
                     else if (migrationResults[1][i][j] == 0) {
@@ -395,11 +395,11 @@ public class DynamicPolicy implements IPolicy {
                             continue;
                         }
                         migrationTasks.add(new MigrationTask(fragmentMeta,
-                                fragmentReadLoadMap.getOrDefault(fragmentMeta, 0L),
-                                fragmentMetaPointsMap
-                                        .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
-                                allNodes[targetIndex],
-                                MigrationType.QUERY));
+                            fragmentReadLoadMap.getOrDefault(fragmentMeta, 0L),
+                            fragmentMetaPointsMap
+                                .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
+                            allNodes[targetIndex],
+                            MigrationType.QUERY));
                     }
                 }
             }
@@ -413,7 +413,7 @@ public class DynamicPolicy implements IPolicy {
         migrationLogger.logMigrationTasks(migrationTasks);
         // 执行迁移
         MigrationManager.getInstance().getMigration()
-                .migrate(migrationTasks, nodeFragmentMap, fragmentWriteLoadMap, fragmentReadLoadMap);
+            .migrate(migrationTasks, nodeFragmentMap, fragmentWriteLoadMap, fragmentReadLoadMap);
     }
 
     private void executeTimeseriesReshard(FragmentMeta fragmentMeta, long points,
@@ -426,7 +426,7 @@ public class DynamicPolicy implements IPolicy {
             // 如果是写入则不需要考虑可定制化副本的情况
             if (isWrite) {
                 MigrationManager.getInstance().getMigration()
-                        .reshardWriteByTimeseries(fragmentMeta, points);
+                    .reshardWriteByTimeseries(fragmentMeta, points);
             } else {
                 TimeseriesMonitor.getInstance().setTargetFragmentMeta(fragmentMeta);
                 TimeseriesMonitor.getInstance().start();
@@ -448,30 +448,27 @@ public class DynamicPolicy implements IPolicy {
                 Map<String, Long> overLoadTimeseriesMap = new HashMap<>();
                 for (Entry<String, Long> timeseriesHeatEntry : timeseriesHeat.entrySet()) {
                     if (timeseriesHeatEntry.getValue() > averageHeat * (1
-                            + maxTimeseriesLoadBalanceThreshold)) {
+                        + maxTimeseriesLoadBalanceThreshold)) {
                         overLoadTimeseriesMap.put(timeseriesHeatEntry.getKey(), timeseriesHeatEntry.getValue());
                     }
                 }
 
                 if (overLoadTimeseriesMap.size() > 0) {
                     MigrationManager.getInstance().getMigration()
-                            .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
-                                    overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);
+                        .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
+                            overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);
                 } else {
                     boolean status = MigrationManager.getInstance().getMigration()
-                            .reshardQueryByTimeseries(fragmentMeta, timeseriesHeat, points);
+                        .reshardQueryByTimeseries(fragmentMeta, timeseriesHeat, points);
                     if (!status) {
                         MigrationManager.getInstance().getMigration()
-                                .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
-                                        overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);
+                            .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
+                                overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);
                     }
                 }
             }
         } catch (Exception e) {
             logger.error("execute timeseries reshard failed :", e);
-        } finally {
-            //完成一轮负载均衡
-            DefaultMetaManager.getInstance().doneReshard();
         }
     }
 
@@ -494,7 +491,7 @@ public class DynamicPolicy implements IPolicy {
             List<FragmentMeta> fragmentMetas = nodeFragmentEntry.getValue();
             for (FragmentMeta fragmentMeta : fragmentMetas) {
                 fragmentSize[currIndex] = fragmentMetaPointsMap
-                        .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST);
+                    .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST);
                 writeLoad[currIndex] = fragmentWriteLoadMap.getOrDefault(fragmentMeta, 0L);
                 readLoad[currIndex] = fragmentReadLoadMap.getOrDefault(fragmentMeta, 0L);
                 currIndex++;
@@ -528,7 +525,7 @@ public class DynamicPolicy implements IPolicy {
                         if (m[i][j] == 1) {
                             objFnList[i * nodeFragmentMap.size() + j + 1] = MigrationTask.RESHARD_MIGRATION_COST;
                             objFnList[totalFragmentNum * nodeFragmentMap.size() + i * nodeFragmentMap.size()
-                                    + j + 1] = fragmentSize[i];
+                                + j + 1] = fragmentSize[i];
                         }
                     }
                 }
@@ -541,8 +538,8 @@ public class DynamicPolicy implements IPolicy {
                     for (int i = 0; i < totalFragmentNum; i++) {
                         loadConstraintList[i * nodeFragmentMap.size() + j + 1] = writeLoad[i];
                         loadConstraintList[totalFragmentNum * nodeFragmentMap.size() + i * nodeFragmentMap
-                                .size()
-                                + j + 1] = readLoad[i];
+                            .size()
+                            + j + 1] = readLoad[i];
                     }
                     problem.addConstraint(loadConstraintList, LpSolve.GE, minLoad);
                     problem.addConstraint(loadConstraintList, LpSolve.LE, maxLoad);
@@ -555,8 +552,8 @@ public class DynamicPolicy implements IPolicy {
                     for (int j = 0; j < nodeFragmentMap.size(); j++) {
                         writeFragmentConstraintList[i * nodeFragmentMap.size() + j + 1] = 1;
                         readFragmentConstraintList[totalFragmentNum * nodeFragmentMap.size()
-                                + i * nodeFragmentMap.size()
-                                + j + 1] = 1;
+                            + i * nodeFragmentMap.size()
+                            + j + 1] = 1;
                     }
                     problem.addConstraint(writeFragmentConstraintList, LpSolve.EQ, 1);
                     problem.addConstraint(readFragmentConstraintList, LpSolve.EQ, 1);
@@ -569,8 +566,8 @@ public class DynamicPolicy implements IPolicy {
                         for (int i = 0; i < totalFragmentNum; i++) {
                             loadConstraintList[i * nodeFragmentMap.size() + j + 1] = writeLoad[i];
                             loadConstraintList[totalFragmentNum * nodeFragmentMap.size() + i * nodeFragmentMap
-                                    .size()
-                                    + j + 1] = readLoad[i];
+                                .size()
+                                + j + 1] = readLoad[i];
                         }
                         problem.addConstraint(loadConstraintList, LpSolve.GE, minLoad);
                         problem.addConstraint(loadConstraintList, LpSolve.LE, maxLoad);
@@ -582,9 +579,9 @@ public class DynamicPolicy implements IPolicy {
                     for (int i = 0; i < totalFragmentNum; i++) {
                         scaleInNodeConstraintList[i * nodeFragmentMap.size() + nodeIndex + 1] = 1;
                         scaleInNodeConstraintList[totalFragmentNum * nodeFragmentMap.size()
-                                + i * nodeFragmentMap
-                                .size()
-                                + nodeIndex + 1] = 1;
+                            + i * nodeFragmentMap
+                            .size()
+                            + nodeIndex + 1] = 1;
                     }
                     problem.addConstraint(scaleInNodeConstraintList, LpSolve.EQ, 0);
                 }
@@ -605,7 +602,7 @@ public class DynamicPolicy implements IPolicy {
                     for (int j = 0; j < nodeFragmentMap.size(); j++) {
                         result[0][i][j] = (int) vars[i * nodeFragmentMap.size() + j];
                         result[1][i][j] = (int) vars[totalFragmentNum * nodeFragmentMap.size()
-                                + i * nodeFragmentMap.size() + j];
+                            + i * nodeFragmentMap.size() + j];
                     }
                 }
             }

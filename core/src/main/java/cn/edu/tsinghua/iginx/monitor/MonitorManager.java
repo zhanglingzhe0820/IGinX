@@ -107,9 +107,9 @@ public class MonitorManager implements Runnable {
                 //清空节点信息
                 metaManager.clearMonitors();
                 Thread.sleep(interval * 1000L);
+                logger.error("start to report monitor statistics");
 
                 //发起负载均衡判断
-                DefaultMetaManager.getInstance().executeReshardJudging();
                 metaManager.updateFragmentRequests(RequestsMonitor.getInstance().getWriteRequestsMap(),
                     RequestsMonitor.getInstance()
                         .getReadRequestsMap());
@@ -131,11 +131,6 @@ public class MonitorManager implements Runnable {
 
                 metaManager.submitMaxActiveEndTime();
                 List<Pair<FragmentMeta, Long>> writeCostList = new ArrayList<>(HotSpotMonitor.getInstance().getWriteCostList());
-                for (int i = 0; i < writeCostList.size(); i++) {
-                    if (writeCostList.get(i) == null) {
-                        logger.error("index {} of writeCostList is null", i);
-                    }
-                }
                 writeCostList.sort(Comparator.comparing(Pair::getV));
                 List<Pair<FragmentMeta, Long>> readCostList = new ArrayList<>(HotSpotMonitor.getInstance().getReadCostList());
                 readCostList.sort(Comparator.comparing(Pair::getV));
@@ -201,21 +196,14 @@ public class MonitorManager implements Runnable {
                         if (((1 - unbalanceThreshold) * averageHeats >= minHeat
                             || (1 + unbalanceThreshold) * averageHeats <= maxHeat)) {
                             logger.info("start to execute reshard");
-                            if (DefaultMetaManager.getInstance().executeReshard()) {
-                                //发起负载均衡
-                                policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
-                                    fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
-                            } else {
-                                logger.info("execute reshard failed");
-                            }
+                            //发起负载均衡
+                            policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
+                                fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
                         }
                     }
                 }
             } catch (Exception e) {
                 logger.error("monitor manager error ", e);
-            } finally {
-                //完成一轮负载均衡
-                DefaultMetaManager.getInstance().doneReshard();
             }
         }
     }
