@@ -44,6 +44,7 @@ import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Op;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.TimeFilter;
 import cn.edu.tsinghua.iginx.engine.shared.source.FragmentSource;
 import cn.edu.tsinghua.iginx.engine.shared.source.OperatorSource;
+import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
@@ -111,9 +112,9 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 selectTimeFilters.add(new TimeFilter(Op.GE, timeInterval.getStartTime()));
                 selectTimeFilters.add(new TimeFilter(Op.L, timeInterval.getEndTime()));
                 selectOperators
-                        .add(new Select(new OperatorSource(project), new AndFilter(selectTimeFilters), null));
+                    .add(new Select(new OperatorSource(project), new AndFilter(selectTimeFilters), null));
                 MemoryPhysicalTask selectPhysicalTask = new UnaryMemoryPhysicalTask(selectOperators,
-                        projectPhysicalTask);
+                    projectPhysicalTask);
                 projectPhysicalTask.setFollowerTask(selectPhysicalTask);
 
                 storageTaskExecutor.commit(projectPhysicalTask);
@@ -150,7 +151,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
 
                     // 按行批量插入数据
                     if (timestampList.size() == ConfigDescriptor.getInstance().getConfig()
-                            .getMigrationBatchSize()) {
+                        .getMigrationBatchSize()) {
                         insertDataByBatch(timestampList, valuesList, bitmapList, toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
                         timestampList.clear();
                         valuesList.clear();
@@ -162,6 +163,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 // 设置分片现在所属的du
                 if (migration.isChangeStorageUnit()) {
                     toMigrateFragment.setMasterStorageUnit(targetReplicaStorageUnitMetaList.get(0));
+                    DefaultMetaManager.getInstance().updateFragmentByTsInterval(toMigrateFragment.getTsInterval(), toMigrateFragment);
                 }
                 return selectResult.getRowStream();
             } else {
@@ -187,7 +189,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
     private void insertDataByBatch(List<Long> timestampList, List<ByteBuffer> valuesList,
                                    List<Bitmap> bitmapList, FragmentMeta toMigrateFragment,
                                    List<String> selectResultPaths, List<DataType> selectResultTypes, List<String> storageUnitIds)
-            throws PhysicalException {
+        throws PhysicalException {
         // 按行批量插入数据
         List<ByteBuffer> bitmapBufferList = new ArrayList<>();
         for (Bitmap bitmap : bitmapList) {
@@ -201,9 +203,9 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 copiedBitmapList.add(copiedBitmap);
             }
             RawData rowData = new RawData(selectResultPaths, Collections.emptyList(), timestampList, rowValueObjects,
-                    selectResultTypes, copiedBitmapList, RawDataType.NonAlignedRow);
+                selectResultTypes, copiedBitmapList, RawDataType.NonAlignedRow);
             RowDataView rowDataView = new RowDataView(rowData, 0, selectResultPaths.size(), 0,
-                    timestampList.size());
+                timestampList.size());
             List<Operator> insertOperators = new ArrayList<>();
             Insert insert = new Insert(new FragmentSource(toMigrateFragment), rowDataView);
             insertOperators.add(insert);

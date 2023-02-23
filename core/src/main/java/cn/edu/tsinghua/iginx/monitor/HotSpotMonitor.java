@@ -12,14 +12,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class HotSpotMonitor implements IMonitor {
 
     private static final Logger logger = LoggerFactory.getLogger(HotSpotMonitor.class);
 
     private final boolean isEnableMonitor = ConfigDescriptor.getInstance().getConfig().isEnableMonitor();
-    private final List<Pair<FragmentMeta, Long>> readCostList = new ArrayList<>(); // 分片,查询耗时
-    private final List<Pair<FragmentMeta, Long>> writeCostList = new ArrayList<>(); // 分片,写入耗时
+    private final List<Pair<FragmentMeta, Long>> readCostList = new CopyOnWriteArrayList<>(); // 分片,查询耗时
+    private final List<Pair<FragmentMeta, Long>> writeCostList = new CopyOnWriteArrayList<>(); // 分片,写入耗时
     private static final HotSpotMonitor instance = new HotSpotMonitor();
 
     public static HotSpotMonitor getInstance() {

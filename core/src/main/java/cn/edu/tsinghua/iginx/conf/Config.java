@@ -56,7 +56,9 @@ public class Config {
 
     private boolean enableMonitor = true;
 
-    private int loadBalanceCheckInterval = 10;
+    private boolean isEnableDynamicMigration = true;
+
+    private int loadBalanceCheckInterval = 3;
 
     private double unbalanceThreshold = 0.1;
 
@@ -330,6 +332,14 @@ public class Config {
 
     public void setMaxTimeseriesLoadBalanceThreshold(double maxTimeseriesLoadBalanceThreshold) {
         this.maxTimeseriesLoadBalanceThreshold = maxTimeseriesLoadBalanceThreshold;
+    }
+
+    public boolean isEnableDynamicMigration() {
+        return isEnableDynamicMigration;
+    }
+
+    public void setEnableDynamicMigration(boolean enableDynamicMigration) {
+        isEnableDynamicMigration = enableDynamicMigration;
     }
 
     public boolean isEnableMonitor() {

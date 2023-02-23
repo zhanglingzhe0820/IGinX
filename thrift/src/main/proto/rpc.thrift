@@ -59,7 +59,8 @@ enum SqlType {
     CommitTransformJob,
     ShowJobStatus,
     CancelJob,
-    ShowEligibleJob
+    ShowEligibleJob,
+    StopMigration
 }
 
 enum AuthType {

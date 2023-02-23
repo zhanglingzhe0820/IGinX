@@ -120,7 +120,6 @@ public class MonitorManager implements Runnable {
                     .getWriteRequestsMap();
                 Map<FragmentMeta, Long> readRequestsMap = RequestsMonitor.getInstance()
                     .getReadRequestsMap();
-                logger.error("readRequestsMap = {}", readRequestsMap);
                 for (Entry<FragmentMeta, Long> requestsOfEachFragment : writeRequestsMap
                     .entrySet()) {
                     totalWriteRequests += requestsOfEachFragment.getValue();
@@ -131,71 +130,85 @@ public class MonitorManager implements Runnable {
 //        logger.error("total write requests: {}", totalWriteRequests);
 
                 metaManager.submitMaxActiveEndTime();
-                List<Pair<FragmentMeta, Long>> writeCostList = HotSpotMonitor.getInstance().getWriteCostList();
+                List<Pair<FragmentMeta, Long>> writeCostList = new ArrayList<>(HotSpotMonitor.getInstance().getWriteCostList());
+                for (int i = 0; i < writeCostList.size(); i++) {
+                    if (writeCostList.get(i) == null) {
+                        logger.error("index {} of writeCostList is null", i);
+                    }
+                }
                 writeCostList.sort(Comparator.comparing(Pair::getV));
-                List<Pair<FragmentMeta, Long>> readCostList = HotSpotMonitor.getInstance().getReadCostList();
+                List<Pair<FragmentMeta, Long>> readCostList = new ArrayList<>(HotSpotMonitor.getInstance().getReadCostList());
                 readCostList.sort(Comparator.comparing(Pair::getV));
 
                 metaManager.updateFragmentHeat(filterAndGetHeatMap(writeCostList), filterAndGetHeatMap(readCostList));
                 //等待收集完成
                 Thread.sleep(1000);
 //        logger.error("start to load fragments heat");
-                //集中信息（初版主要是统计分区热度）
-                Pair<Map<FragmentMeta, Long>, Map<FragmentMeta, Long>> fragmentHeatPair = metaManager
-                    .loadFragmentHeat();
-                Map<FragmentMeta, Long> fragmentHeatWriteMap = fragmentHeatPair.getK();
-                Map<FragmentMeta, Long> fragmentHeatReadMap = fragmentHeatPair.getV();
-                if (fragmentHeatWriteMap == null) {
-                    fragmentHeatWriteMap = new HashMap<>();
-                }
-                if (fragmentHeatReadMap == null) {
-                    fragmentHeatReadMap = new HashMap<>();
-                }
-//        logger.error("start to load fragments points");
-                Map<FragmentMeta, Long> fragmentMetaPointsMap = metaManager.loadFragmentPoints();
-//        logger.error("start to load fragment of each node");
-                Map<Long, List<FragmentMeta>> fragmentOfEachNode = loadFragmentOfEachNode(
-                    fragmentHeatWriteMap, fragmentHeatReadMap);
 
-                long totalHeats = 0;
-                long maxHeat = 0;
-                long minHeat = Long.MAX_VALUE;
-//        logger.error("start to print all fragments of each node");
-                for (Entry<Long, List<FragmentMeta>> fragmentOfEachNodeEntry : fragmentOfEachNode
-                    .entrySet()) {
-                    long heat = 0;
-                    long requests = 0;
-                    List<FragmentMeta> fragmentMetas = fragmentOfEachNodeEntry.getValue();
-                    for (FragmentMeta fragmentMeta : fragmentMetas) {
-                        logger.error("fragment: {}", fragmentMeta.toString());
-                        logger.error("fragment heat write: {} = {}", fragmentMeta,
-                            fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L));
-                        heat += fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
-                        logger.error("fragment heat read: {} = {}", fragmentMeta,
-                            fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
-                        heat += fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
-                        requests += writeRequestsMap.getOrDefault(fragmentMeta, 0L);
-                        requests += readRequestsMap.getOrDefault(fragmentMeta, 0L);
+                // 为了性能和方便，当前仅第一个节点可进行负载均衡及判断
+                if (DefaultMetaManager.getInstance().getIginxList().get(0).getId() == DefaultMetaManager.getInstance().getIginxId()) {
+                    //集中信息（初版主要是统计分区热度）
+                    Pair<Map<FragmentMeta, Long>, Map<FragmentMeta, Long>> fragmentHeatPair = metaManager
+                        .loadFragmentHeat();
+                    Map<FragmentMeta, Long> fragmentHeatWriteMap = fragmentHeatPair.getK();
+                    Map<FragmentMeta, Long> fragmentHeatReadMap = fragmentHeatPair.getV();
+                    if (fragmentHeatWriteMap == null) {
+                        fragmentHeatWriteMap = new HashMap<>();
                     }
-                    logger.error("heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
-                    logger.error("requests of node {} : {}", fragmentOfEachNodeEntry.getKey(), requests);
+                    if (fragmentHeatReadMap == null) {
+                        fragmentHeatReadMap = new HashMap<>();
+                    }
+//                logger.error("fragmentHeatReadMap = {}", fragmentHeatReadMap);
+//        logger.error("start to load fragments points");
+                    Map<FragmentMeta, Long> fragmentMetaPointsMap = metaManager.loadFragmentPoints();
+//        logger.error("start to load fragment of each node");
+                    Map<Long, List<FragmentMeta>> fragmentOfEachNode = loadFragmentOfEachNode(
+                        fragmentHeatWriteMap, fragmentHeatReadMap);
 
-                    totalHeats += heat;
-                    maxHeat = Math.max(maxHeat, heat);
-                    minHeat = Math.min(minHeat, heat);
-                }
+                    long totalHeats = 0;
+                    long maxHeat = 0;
+                    long minHeat = Long.MAX_VALUE;
+//        logger.error("start to print all fragments of each node");
+                    for (Entry<Long, List<FragmentMeta>> fragmentOfEachNodeEntry : fragmentOfEachNode
+                        .entrySet()) {
+                        long heat = 0;
+                        long requests = 0;
+                        List<FragmentMeta> fragmentMetas = fragmentOfEachNodeEntry.getValue();
+                        for (FragmentMeta fragmentMeta : fragmentMetas) {
+//                        logger.error("fragment: {}", fragmentMeta.toString());
+//                        logger.error("fragment heat write: {} = {}", fragmentMeta,
+//                            fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L));
+                            heat += fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
+                            logger.error("fragment heat: {} = {}", fragmentMeta,
+                                fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
+                            logger.error("fragment request: {} = {}", fragmentMeta,
+                                readRequestsMap.getOrDefault(fragmentMeta, 0L));
+                            heat += fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
+                            requests += writeRequestsMap.getOrDefault(fragmentMeta, 0L);
+                            requests += readRequestsMap.getOrDefault(fragmentMeta, 0L);
+                        }
+                        logger.error("heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
+                        logger.error("requests of node {} : {}", fragmentOfEachNodeEntry.getKey(), requests);
+
+                        totalHeats += heat;
+                        maxHeat = Math.max(maxHeat, heat);
+                        minHeat = Math.min(minHeat, heat);
+                    }
 //        logger.error("end print all fragments of each node");
-                double averageHeats = totalHeats * 1.0 / fragmentOfEachNode.size();
+                    double averageHeats = totalHeats * 1.0 / fragmentOfEachNode.size();
 
-                if (((1 - unbalanceThreshold) * averageHeats >= minHeat
-                    || (1 + unbalanceThreshold) * averageHeats <= maxHeat)) {
-                    logger.info("start to execute reshard");
-                    if (DefaultMetaManager.getInstance().executeReshard()) {
-                        //发起负载均衡
-                        policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
-                            fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
-                    } else {
-                        logger.info("execute reshard failed");
+                    if (ConfigDescriptor.getInstance().getConfig().isEnableDynamicMigration()) {
+                        if (((1 - unbalanceThreshold) * averageHeats >= minHeat
+                            || (1 + unbalanceThreshold) * averageHeats <= maxHeat)) {
+                            logger.info("start to execute reshard");
+                            if (DefaultMetaManager.getInstance().executeReshard()) {
+                                //发起负载均衡
+                                policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
+                                    fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
+                            } else {
+                                logger.info("execute reshard failed");
+                            }
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -208,11 +221,10 @@ public class MonitorManager implements Runnable {
     }
 
     private Map<FragmentMeta, Long> filterAndGetHeatMap(List<Pair<FragmentMeta, Long>> soredCostList) {
-        logger.error("soredCostList = {}", soredCostList);
         if (soredCostList.size() >= 10) {
-            double removeHighPercent = 0.99; // 保留大于等于P99的数据
+            double removeHighPercent = 0.95; // 保留大于等于P99的数据
             double removeHighHeatTimes = 10; // 保留小于10倍的平均延迟的数据
-            double removeLowPercent = 0.01; // 保留大于等于P1的数据
+            double removeLowPercent = 0.05; // 保留大于等于P1的数据
             double removeLowHeatTimes = 0.1; // 保留大于0.1倍的平均延迟的数据
 
             long totalHeat = 0L;
@@ -240,14 +252,12 @@ public class MonitorManager implements Runnable {
                 }
             }
         }
-        logger.error("soredCostList = {}", soredCostList);
 
         Map<FragmentMeta, Long> result = new HashMap<>();
         for (Pair<FragmentMeta, Long> pair : soredCostList) {
             long heat = result.getOrDefault(pair.getK(), 0L);
             result.put(pair.getK(), heat + pair.getV());
         }
-        logger.error("resultFragmentHeat = {}", result);
         return result;
     }
 

@@ -198,10 +198,10 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
 
     public ZooKeeperMetaStorage() {
         client = CuratorFrameworkFactory.builder()
-                .connectString(ConfigDescriptor.getInstance().getConfig().getZookeeperConnectionString())
-                .connectionTimeoutMs(15000)
-                .retryPolicy(new RetryForever(1000))
-                .build();
+            .connectString(ConfigDescriptor.getInstance().getConfig().getZookeeperConnectionString())
+            .connectionTimeoutMs(15000)
+            .retryPolicy(new RetryForever(1000))
+            .build();
         client.start();
 
         fragmentMutex = new InterProcessMutex(client, FRAGMENT_LOCK_NODE);
@@ -209,7 +209,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         reshardStatusMutex = new InterProcessMutex(client, RESHARD_STATUS_LOCK_NODE);
         reshardCounterMutex = new InterProcessMutex(client, RESHARD_COUNTER_LOCK_NODE);
         maxActiveEndTimeStatisticsMutex = new InterProcessMutex(client,
-                ACTIVE_END_TIME_COUNTER_LOCK_NODE);
+            ACTIVE_END_TIME_COUNTER_LOCK_NODE);
         fragmentRequestsCounterMutex = new InterProcessMutex(client, LATENCY_COUNTER_LOCK_NODE);
         fragmentHeatCounterMutex = new InterProcessMutex(client, FRAGMENT_HEAT_COUNTER_LOCK_NODE);
         timeseriesHeatCounterMutex = new InterProcessMutex(client, TIMESERIES_HEAT_COUNTER_LOCK_NODE);
@@ -235,14 +235,14 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             if (client.checkExists().forPath(SCHEMA_MAPPING_PREFIX) == null) {
                 // 当前还没有数据，创建父节点，然后不需要解析数据
                 client.create()
-                        .withMode(CreateMode.PERSISTENT)
-                        .forPath(SCHEMA_MAPPING_PREFIX);
+                    .withMode(CreateMode.PERSISTENT)
+                    .forPath(SCHEMA_MAPPING_PREFIX);
             } else {
                 List<String> schemas = this.client.getChildren()
-                        .forPath(SCHEMA_MAPPING_PREFIX);
+                    .forPath(SCHEMA_MAPPING_PREFIX);
                 for (String schema : schemas) {
                     Map<String, Integer> schemaMapping = JsonUtils.getGson().fromJson(new String(this.client.getData()
-                            .forPath(SCHEMA_MAPPING_PREFIX + "/" + schema)), new TypeToken<Map<String, Integer>>() {
+                        .forPath(SCHEMA_MAPPING_PREFIX + "/" + schema)), new TypeToken<Map<String, Integer>>() {
                     }.getType());
                     schemaMappings.put(schema, schemaMapping);
                 }
@@ -332,14 +332,14 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             if (client.checkExists().forPath(IGINX_NODE_PREFIX) == null) {
                 // 当前还没有数据，创建父节点，然后不需要解析数据
                 client.create()
-                        .withMode(CreateMode.PERSISTENT)
-                        .forPath(IGINX_NODE_PREFIX);
+                    .withMode(CreateMode.PERSISTENT)
+                    .forPath(IGINX_NODE_PREFIX);
             } else {
                 List<String> children = client.getChildren()
-                        .forPath(IGINX_NODE_PREFIX);
+                    .forPath(IGINX_NODE_PREFIX);
                 for (String childName : children) {
                     byte[] data = client.getData()
-                            .forPath(IGINX_NODE_PREFIX + "/" + childName);
+                        .forPath(IGINX_NODE_PREFIX + "/" + childName);
                     IginxMeta iginxMeta = JsonUtils.fromJson(data, IginxMeta.class);
                     if (iginxMeta == null) {
                         logger.error("resolve data from " + IGINX_NODE_PREFIX + "/" + childName + " error");
@@ -367,14 +367,14 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             mutex.acquire();
             String nodeName = this.client.create()
-                    .creatingParentsIfNeeded()
-                    .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                    .forPath(IGINX_NODE, "".getBytes(StandardCharsets.UTF_8));
+                .creatingParentsIfNeeded()
+                .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+                .forPath(IGINX_NODE, "".getBytes(StandardCharsets.UTF_8));
             long id = Long.parseLong(nodeName.substring(IGINX_NODE.length()));
             IginxMeta iginxMeta = new IginxMeta(id, iginx.getIp(),
-                    iginx.getPort(), iginx.getExtraParams());
+                iginx.getPort(), iginx.getExtraParams());
             this.client.setData()
-                    .forPath(nodeName, JsonUtils.toJson(iginxMeta));
+                .forPath(nodeName, JsonUtils.toJson(iginxMeta));
             return id;
         } catch (Exception e) {
             throw new MetaStorageException("get error when load iginx", e);
@@ -444,13 +444,13 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             mutex.acquire();
             if (this.client.checkExists().forPath(STORAGE_ENGINE_NODE_PREFIX) == null) { // 节点不存在，说明还没有别的 iginx 节点写入过元信息
                 this.client.create().creatingParentsIfNeeded()
-                        .withMode(CreateMode.PERSISTENT)
-                        .forPath(STORAGE_ENGINE_NODE_PREFIX);
+                    .withMode(CreateMode.PERSISTENT)
+                    .forPath(STORAGE_ENGINE_NODE_PREFIX);
                 for (StorageEngineMeta storageEngineMeta : storageEngines) {
                     String nodeName = this.client.create()
-                            .creatingParentsIfNeeded()
-                            .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
-                            .forPath(STORAGE_ENGINE_NODE, "".getBytes(StandardCharsets.UTF_8));
+                        .creatingParentsIfNeeded()
+                        .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
+                        .forPath(STORAGE_ENGINE_NODE, "".getBytes(StandardCharsets.UTF_8));
                     long id = Long.parseLong(nodeName.substring(STORAGE_ENGINE_NODE.length()));
                     storageEngineMeta.setId(id);
                     this.client.setData().forPath(nodeName, JsonUtils.toJson(storageEngineMeta));
@@ -463,7 +463,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             List<String> children = this.client.getChildren().forPath(STORAGE_ENGINE_NODE_PREFIX);
             for (String childName : children) {
                 byte[] data = this.client.getData()
-                        .forPath(STORAGE_ENGINE_NODE_PREFIX + "/" + childName);
+                    .forPath(STORAGE_ENGINE_NODE_PREFIX + "/" + childName);
                 StorageEngineMeta storageEngineMeta = JsonUtils.fromJson(data, StorageEngineMeta.class);
                 if (storageEngineMeta == null) {
                     logger.error("resolve data from " + STORAGE_ENGINE_NODE_PREFIX + "/" + childName + " error");
@@ -497,7 +497,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 logger.error(STORAGE_ENGINE_NODE_PREFIX + "/" + childName);
             }
             this.client.delete()
-                    .forPath(STORAGE_ENGINE_NODE_PREFIX + String.format("%010d", storageEngine.getId()));
+                .forPath(STORAGE_ENGINE_NODE_PREFIX + String.format("%010d", storageEngine.getId()));
         } catch (Exception e) {
             throw new MetaStorageException("get error when remove storage engine", e);
         } finally {
@@ -505,7 +505,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 mutex.release();
             } catch (Exception e) {
                 throw new MetaStorageException(
-                        "get error when release interprocess lock for " + SCHEMA_MAPPING_LOCK_NODE, e);
+                    "get error when release interprocess lock for " + SCHEMA_MAPPING_LOCK_NODE, e);
             }
         }
     }
@@ -516,13 +516,13 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             mutex.acquire();
             String nodeName = this.client.create()
-                    .creatingParentsIfNeeded()
-                    .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
-                    .forPath(STORAGE_ENGINE_NODE, "".getBytes(StandardCharsets.UTF_8));
+                .creatingParentsIfNeeded()
+                .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
+                .forPath(STORAGE_ENGINE_NODE, "".getBytes(StandardCharsets.UTF_8));
             long id = Long.parseLong(nodeName.substring(STORAGE_ENGINE_NODE.length()));
             storageEngine.setId(id);
             this.client.setData()
-                    .forPath(nodeName, JsonUtils.toJson(storageEngine));
+                .forPath(nodeName, JsonUtils.toJson(storageEngine));
             return id;
         } catch (Exception e) {
             throw new MetaStorageException("get error when add storage engine", e);
@@ -604,7 +604,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 for (String storageUnitId : storageUnitIds) {
                     logger.info("load storage unit: " + storageUnitId);
                     byte[] data = this.client.getData()
-                            .forPath(STORAGE_UNIT_NODE_PREFIX + "/" + storageUnitId);
+                        .forPath(STORAGE_UNIT_NODE_PREFIX + "/" + storageUnitId);
                     StorageUnitMeta storageUnitMeta = JsonUtils.fromJson(data, StorageUnitMeta.class);
                     if (!storageUnitMeta.isMaster()) { // 需要加入到主节点的子节点列表中
                         StorageUnitMeta masterStorageUnitMeta = storageUnitMetaMap.get(storageUnitMeta.getMasterId());
@@ -639,9 +639,9 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     public String addStorageUnit() throws MetaStorageException { // 只在有锁的情况下调用，内部不需要加锁
         try {
             String nodeName = this.client.create()
-                    .creatingParentsIfNeeded()
-                    .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
-                    .forPath(STORAGE_UNIT_NODE, "".getBytes(StandardCharsets.UTF_8));
+                .creatingParentsIfNeeded()
+                .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
+                .forPath(STORAGE_UNIT_NODE, "".getBytes(StandardCharsets.UTF_8));
             return nodeName.substring(STORAGE_UNIT_NODE_PREFIX.length() + 1);
         } catch (Exception e) {
             throw new MetaStorageException("add storage unit error: ", e);
@@ -652,7 +652,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     public void updateStorageUnit(StorageUnitMeta storageUnitMeta) throws MetaStorageException { // 只在有锁的情况下调用，内部不需要加锁
         try {
             this.client.setData()
-                    .forPath(STORAGE_UNIT_NODE_PREFIX + "/" + storageUnitMeta.getId(), JsonUtils.toJson(storageUnitMeta));
+                .forPath(STORAGE_UNIT_NODE_PREFIX + "/" + storageUnitMeta.getId(), JsonUtils.toJson(storageUnitMeta));
         } catch (Exception e) {
             throw new MetaStorageException("add storage unit error: ", e);
         }
@@ -714,7 +714,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                             break;
                         }
                         FragmentMeta fragmentMeta = JsonUtils.fromJson(this.client.getData()
-                                .forPath(FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName), FragmentMeta.class);
+                            .forPath(FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName), FragmentMeta.class);
                         if (fragmentMeta.getTimeInterval().getEndTime() > timeInterval.getStartTime()) {
                             fragments.add(fragmentMeta);
                         }
@@ -743,7 +743,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                             break;
                         }
                         FragmentMeta fragmentMeta = JsonUtils.fromJson(this.client.getData()
-                                .forPath(FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName), FragmentMeta.class);
+                            .forPath(FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName), FragmentMeta.class);
                         if (fragmentMeta.getTimeInterval().getEndTime() > timeInterval.getStartTime()) {
                             fragments.add(fragmentMeta);
                         }
@@ -774,7 +774,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                     List<String> timeIntervalNames = this.client.getChildren().forPath(FRAGMENT_NODE_PREFIX + "/" + tsIntervalName);
                     for (String timeIntervalName : timeIntervalNames) {
                         FragmentMeta fragmentMeta = JsonUtils.fromJson(this.client.getData()
-                                .forPath(FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName), FragmentMeta.class);
+                            .forPath(FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName), FragmentMeta.class);
                         fragmentMetaList.add(fragmentMeta);
                     }
                     fragmentListMap.put(fragmentTimeSeries, fragmentMetaList);
@@ -840,7 +840,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     public void updateFragment(FragmentMeta fragmentMeta) throws MetaStorageException { // 只在有锁的情况下调用，内部不需要加锁
         try {
             this.client.setData()
-                    .forPath(FRAGMENT_NODE_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString(), JsonUtils.toJson(fragmentMeta));
+                .forPath(FRAGMENT_NODE_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString(), JsonUtils.toJson(fragmentMeta));
         } catch (Exception e) {
             throw new MetaStorageException("get error when update fragment", e);
         }
@@ -850,7 +850,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     public void addFragment(FragmentMeta fragmentMeta) throws MetaStorageException { // 只在有锁的情况下调用，内部不需要加锁
         try {
             this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(FRAGMENT_NODE_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString(), JsonUtils.toJson(fragmentMeta));
+                .forPath(FRAGMENT_NODE_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString(), JsonUtils.toJson(fragmentMeta));
         } catch (Exception e) {
             throw new MetaStorageException("get error when add fragment", e);
         }
@@ -858,20 +858,20 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
 
     @Override
     public void updateFragmentByTsInterval(TimeSeriesInterval tsInterval, FragmentMeta fragmentMeta)
-            throws MetaStorageException {
+        throws MetaStorageException {
         try {
             this.client.delete()
-                    .forPath(FRAGMENT_NODE_PREFIX + "/" + tsInterval.toString() + "/" + fragmentMeta
-                            .getTimeInterval().toString());
+                .forPath(FRAGMENT_NODE_PREFIX + "/" + tsInterval.toString() + "/" + fragmentMeta
+                    .getTimeInterval().toString());
             List<String> timeIntervalNames = this.client.getChildren()
-                    .forPath(FRAGMENT_NODE_PREFIX + "/" + tsInterval.toString());
+                .forPath(FRAGMENT_NODE_PREFIX + "/" + tsInterval.toString());
             if (timeIntervalNames.isEmpty()) {
                 this.client.delete()
-                        .forPath(FRAGMENT_NODE_PREFIX + "/" + tsInterval.toString());
+                    .forPath(FRAGMENT_NODE_PREFIX + "/" + tsInterval.toString());
             }
             this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(FRAGMENT_NODE_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/"
-                            + fragmentMeta.getTimeInterval().toString(), JsonUtils.toJson(fragmentMeta));
+                .forPath(FRAGMENT_NODE_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/"
+                    + fragmentMeta.getTimeInterval().toString(), JsonUtils.toJson(fragmentMeta));
         } catch (Exception e) {
             throw new MetaStorageException("get error when update fragment", e);
         }
@@ -934,13 +934,13 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             mutex.acquire();
             if (this.client.checkExists().forPath(USER_NODE_PREFIX) == null) { // 节点不存在，说明系统中第一个用户还没有被创建
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(USER_NODE_PREFIX + "/" + userMeta.getUsername(), JsonUtils.toJson(userMeta));
+                    .forPath(USER_NODE_PREFIX + "/" + userMeta.getUsername(), JsonUtils.toJson(userMeta));
             }
             List<UserMeta> users = new ArrayList<>();
             List<String> usernames = this.client.getChildren().forPath(USER_NODE_PREFIX);
             for (String username : usernames) {
                 byte[] data = this.client.getData()
-                        .forPath(USER_NODE_PREFIX + "/" + username);
+                    .forPath(USER_NODE_PREFIX + "/" + username);
                 UserMeta user = JsonUtils.fromJson(data, UserMeta.class);
                 if (user == null) {
                     logger.error("resolve data from " + USER_NODE_PREFIX + "/" + username + " error");
@@ -972,7 +972,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             mutex.acquire();
             this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(USER_NODE_PREFIX + "/" + userMeta.getUsername(), JsonUtils.toJson(userMeta));
+                .forPath(USER_NODE_PREFIX + "/" + userMeta.getUsername(), JsonUtils.toJson(userMeta));
         } catch (Exception e) {
             throw new MetaStorageException("get error when add user", e);
         } finally {
@@ -990,7 +990,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             mutex.acquire();
             this.client.setData()
-                    .forPath(USER_NODE_PREFIX + "/" + userMeta.getUsername(), JsonUtils.toJson(userMeta));
+                .forPath(USER_NODE_PREFIX + "/" + userMeta.getUsername(), JsonUtils.toJson(userMeta));
         } catch (Exception e) {
             throw new MetaStorageException("get error when update user", e);
         } finally {
@@ -1008,7 +1008,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             mutex.acquire();
             this.client.delete()
-                    .forPath(USER_NODE_PREFIX + "/" + username);
+                .forPath(USER_NODE_PREFIX + "/" + username);
         } catch (Exception e) {
             throw new MetaStorageException("get error when remove user", e);
         } finally {
@@ -1037,9 +1037,9 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         }
         try {
             this.client.create()
-                    .creatingParentsIfNeeded()
-                    .withMode(CreateMode.EPHEMERAL)
-                    .forPath(POLICY_LEADER);
+                .creatingParentsIfNeeded()
+                .withMode(CreateMode.EPHEMERAL)
+                .forPath(POLICY_LEADER);
             logger.info("成功");
             isMaster = true;
         } catch (KeeperException.NodeExistsException e) {
@@ -1077,11 +1077,11 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         Map<String, Double> ret = new HashMap<>();
         try {
             Set<Integer> idSet = loadIginx().keySet().stream().
-                    map(Long::intValue).collect(Collectors.toSet());
+                map(Long::intValue).collect(Collectors.toSet());
             List<String> children = client.getChildren().forPath(TIMESERIES_NODE_PREFIX);
             for (String child : children) {
                 byte[] data = this.client.getData()
-                        .forPath(TIMESERIES_NODE_PREFIX + "/" + child);
+                    .forPath(TIMESERIES_NODE_PREFIX + "/" + child);
                 if (!idSet.contains(Integer.parseInt(child))) {
                     continue;
                 }
@@ -1143,37 +1143,37 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             mutex.acquire();
             if (client.checkExists().forPath(POLICY_NODE_PREFIX) == null) {
                 this.client.create()
-                        .creatingParentsIfNeeded()
-                        .withMode(CreateMode.PERSISTENT)
-                        .forPath(POLICY_NODE_PREFIX);
+                    .creatingParentsIfNeeded()
+                    .withMode(CreateMode.PERSISTENT)
+                    .forPath(POLICY_NODE_PREFIX);
             }
 
             if (client.checkExists().forPath(TIMESERIES_NODE_PREFIX) == null) {
                 this.client.create()
-                        .creatingParentsIfNeeded()
-                        .withMode(CreateMode.PERSISTENT)
-                        .forPath(TIMESERIES_NODE_PREFIX);
+                    .creatingParentsIfNeeded()
+                    .withMode(CreateMode.PERSISTENT)
+                    .forPath(TIMESERIES_NODE_PREFIX);
             }
             if (client.checkExists().forPath(POLICY_VERSION) == null) {
                 this.client.create()
-                        .creatingParentsIfNeeded()
-                        .withMode(CreateMode.PERSISTENT)
-                        .forPath(POLICY_VERSION);
+                    .creatingParentsIfNeeded()
+                    .withMode(CreateMode.PERSISTENT)
+                    .forPath(POLICY_VERSION);
 
                 this.client.setData().forPath(POLICY_VERSION, ("0" + "\t" + num).getBytes());
             }
 
             this.client.create()
-                    .creatingParentsIfNeeded()
-                    .withMode(CreateMode.PERSISTENT)
-                    .forPath(POLICY_NODE_PREFIX + "/" + iginxId);
+                .creatingParentsIfNeeded()
+                .withMode(CreateMode.PERSISTENT)
+                .forPath(POLICY_NODE_PREFIX + "/" + iginxId);
 
             this.client.setData().forPath(POLICY_NODE_PREFIX + "/" + iginxId, "0".getBytes());
 
             this.client.create()
-                    .creatingParentsIfNeeded()
-                    .withMode(CreateMode.PERSISTENT)
-                    .forPath(TIMESERIES_NODE_PREFIX + "/" + iginxId);
+                .creatingParentsIfNeeded()
+                .withMode(CreateMode.PERSISTENT)
+                .forPath(TIMESERIES_NODE_PREFIX + "/" + iginxId);
 
             this.policyCache = new TreeCache(this.client, POLICY_LEADER);
             TreeCacheListener listener = (curatorFramework, event) -> {
@@ -1269,14 +1269,14 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             if (this.client.checkExists().forPath(TRANSFORM_NODE_PREFIX) == null) {
                 // 当前还没有数据，创建父节点，然后不需要解析数据
                 client.create()
-                        .creatingParentsIfNeeded()
-                        .withMode(CreateMode.PERSISTENT)
-                        .forPath(TRANSFORM_NODE_PREFIX);
+                    .creatingParentsIfNeeded()
+                    .withMode(CreateMode.PERSISTENT)
+                    .forPath(TRANSFORM_NODE_PREFIX);
             } else {
                 List<String> classNames = this.client.getChildren().forPath(TRANSFORM_NODE_PREFIX);
                 for (String className : classNames) {
                     byte[] data = this.client.getData()
-                            .forPath(TRANSFORM_NODE_PREFIX + "/" + className);
+                        .forPath(TRANSFORM_NODE_PREFIX + "/" + className);
                     TransformTaskMeta task = JsonUtils.fromJson(data, TransformTaskMeta.class);
                     if (task == null) {
                         logger.error("resolve data from " + TRANSFORM_NODE_PREFIX + "/" + className + " error");
@@ -1309,7 +1309,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 case NODE_ADDED:
                 case NODE_UPDATED:
                     if (event.getData() == null || event.getData().getPath() == null ||
-                            event.getData().getPath().equals(TRANSFORM_NODE_PREFIX)) {
+                        event.getData().getPath().equals(TRANSFORM_NODE_PREFIX)) {
                         return; // 前缀事件，非含数据的节点的变化，不需要处理
                     }
                     taskMeta = JsonUtils.fromJson(event.getData().getData(), TransformTaskMeta.class);
@@ -1339,7 +1339,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             mutex.acquire();
             this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(TRANSFORM_NODE_PREFIX + "/" + transformTask.getName(), JsonUtils.toJson(transformTask));
+                .forPath(TRANSFORM_NODE_PREFIX + "/" + transformTask.getName(), JsonUtils.toJson(transformTask));
         } catch (Exception e) {
             throw new MetaStorageException("get error when add transform task", e);
         } finally {
@@ -1357,7 +1357,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             mutex.acquire();
             this.client.setData()
-                    .forPath(TRANSFORM_NODE_PREFIX + "/" + transformTask.getName(), JsonUtils.toJson(transformTask));
+                .forPath(TRANSFORM_NODE_PREFIX + "/" + transformTask.getName(), JsonUtils.toJson(transformTask));
         } catch (Exception e) {
             throw new MetaStorageException("get error when update transform task", e);
         } finally {
@@ -1375,7 +1375,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             mutex.acquire();
             this.client.delete()
-                    .forPath(TRANSFORM_NODE_PREFIX + "/" + name);
+                .forPath(TRANSFORM_NODE_PREFIX + "/" + name);
         } catch (Exception e) {
             throw new MetaStorageException("get error when drop transform task", e);
         } finally {
@@ -1393,12 +1393,12 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             String path = STATISTICS_TIMESERIES_HEAT_PREFIX + "/" + timeseriesLoadEntry.getKey();
             if (this.client.checkExists().forPath(path) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(path, JsonUtils.toJson(timeseriesLoadEntry.getValue()));
+                    .forPath(path, JsonUtils.toJson(timeseriesLoadEntry.getValue()));
             }
             byte[] data = this.client.getData().forPath(path);
             long heat = JsonUtils.fromJson(data, Long.class);
             this.client.setData()
-                    .forPath(path, JsonUtils.toJson(heat + timeseriesLoadEntry.getValue()));
+                .forPath(path, JsonUtils.toJson(heat + timeseriesLoadEntry.getValue()));
         }
     }
 
@@ -1408,7 +1408,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         List<String> children = client.getChildren().forPath(STATISTICS_TIMESERIES_HEAT_PREFIX);
         for (String child : children) {
             byte[] data = this.client.getData()
-                    .forPath(STATISTICS_TIMESERIES_HEAT_PREFIX + "/" + child);
+                .forPath(STATISTICS_TIMESERIES_HEAT_PREFIX + "/" + child);
             long heat = JsonUtils.fromJson(data, Long.class);
             timeseriesHeatMap.put(child, heat);
         }
@@ -1420,7 +1420,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_TIMESERIES_HEAT_PREFIX) != null) {
                 this.client.delete().deletingChildrenIfNeeded()
-                        .forPath(STATISTICS_TIMESERIES_HEAT_PREFIX);
+                    .forPath(STATISTICS_TIMESERIES_HEAT_PREFIX);
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when removing timeseries heat: ", e);
@@ -1435,8 +1435,8 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         } catch (Exception e) {
             timeseriesHeatCounterMutexLock.unlock();
             throw new MetaStorageException(
-                    "encounter error when acquiring timeseries heat counter mutex: ",
-                    e);
+                "encounter error when acquiring timeseries heat counter mutex: ",
+                e);
         }
     }
 
@@ -1445,13 +1445,13 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX, JsonUtils.toJson(1));
+                    .forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX, JsonUtils.toJson(1));
             } else {
                 int counter = JsonUtils.fromJson(
-                        this.client.getData().forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX),
-                        Integer.class);
+                    this.client.getData().forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX),
+                    Integer.class);
                 this.client.setData()
-                        .forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX, JsonUtils.toJson(counter + 1));
+                    .forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX, JsonUtils.toJson(counter + 1));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when updating timeseries heat counter: ", e);
@@ -1463,10 +1463,10 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX, JsonUtils.toJson(0));
+                    .forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX, JsonUtils.toJson(0));
             } else {
                 this.client.setData()
-                        .forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX, JsonUtils.toJson(0));
+                    .forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX, JsonUtils.toJson(0));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when resetting timeseries heat counter: ", e);
@@ -1491,8 +1491,8 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 return 0;
             } else {
                 return JsonUtils.fromJson(
-                        this.client.getData().forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX),
-                        Integer.class);
+                    this.client.getData().forPath(STATISTICS_TIMESERIES_HEAT_COUNTER_PREFIX),
+                    Integer.class);
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when get timeseries heat counter: ", e);
@@ -1506,68 +1506,68 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         for (Entry<FragmentMeta, Long> writeRequestsEntry : writeRequestsMap.entrySet()) {
             if (writeRequestsEntry.getValue() > 0) {
                 String requestsPath =
-                        STATISTICS_FRAGMENT_REQUESTS_PREFIX_WRITE + "/" + writeRequestsEntry.getKey()
-                                .getTsInterval()
-                                .toString() + "/" + writeRequestsEntry.getKey().getTimeInterval().toString();
+                    STATISTICS_FRAGMENT_REQUESTS_PREFIX_WRITE + "/" + writeRequestsEntry.getKey()
+                        .getTsInterval()
+                        .toString() + "/" + writeRequestsEntry.getKey().getTimeInterval().toString();
                 String pointsPath =
-                        STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + writeRequestsEntry.getKey()
-                                .getTsInterval()
-                                .toString() + "/" + writeRequestsEntry.getKey().getTimeInterval().toString();
+                    STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + writeRequestsEntry.getKey()
+                        .getTsInterval()
+                        .toString() + "/" + writeRequestsEntry.getKey().getTimeInterval().toString();
                 if (this.client.checkExists().forPath(requestsPath) == null) {
                     this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                            .forPath(requestsPath, JsonUtils.toJson(writeRequestsEntry.getValue()));
+                        .forPath(requestsPath, JsonUtils.toJson(writeRequestsEntry.getValue()));
                 }
                 byte[] data = this.client.getData().forPath(requestsPath);
                 long requests = JsonUtils.fromJson(data, Long.class);
                 this.client.setData()
-                        .forPath(requestsPath, JsonUtils.toJson(requests + writeRequestsEntry.getValue()));
+                    .forPath(requestsPath, JsonUtils.toJson(requests + writeRequestsEntry.getValue()));
 
                 if (this.client.checkExists().forPath(pointsPath) == null) {
                     this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                            .forPath(pointsPath, JsonUtils.toJson(writeRequestsEntry.getValue()));
+                        .forPath(pointsPath, JsonUtils.toJson(writeRequestsEntry.getValue()));
                 }
                 data = this.client.getData().forPath(pointsPath);
                 long points = JsonUtils.fromJson(data, Long.class);
                 this.client.setData()
-                        .forPath(pointsPath, JsonUtils.toJson(points + writeRequestsEntry.getValue()));
+                    .forPath(pointsPath, JsonUtils.toJson(points + writeRequestsEntry.getValue()));
             }
         }
         for (Entry<FragmentMeta, Long> readRequestsEntry : readRequestsMap.entrySet()) {
             String path =
-                    STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ + "/" + readRequestsEntry.getKey()
-                            .getTsInterval()
-                            .toString() + "/" + readRequestsEntry.getKey().getTimeInterval().toString() + "/" + readRequestsEntry.getKey().getMasterStorageUnit().getStorageEngineId();
+                STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ + "/" + readRequestsEntry.getKey()
+                    .getTsInterval()
+                    .toString() + "/" + readRequestsEntry.getKey().getTimeInterval().toString() + "/" + readRequestsEntry.getKey().getMasterStorageUnit().getStorageEngineId();
             if (this.client.checkExists().forPath(path) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(path, JsonUtils.toJson(readRequestsEntry.getValue()));
+                    .forPath(path, JsonUtils.toJson(readRequestsEntry.getValue()));
             }
             byte[] data = this.client.getData().forPath(path);
             long requests = JsonUtils.fromJson(data, Long.class);
             this.client.setData()
-                    .forPath(path, JsonUtils.toJson(requests + readRequestsEntry.getValue()));
+                .forPath(path, JsonUtils.toJson(requests + readRequestsEntry.getValue()));
         }
     }
 
     @Override
     public Map<FragmentMeta, Long> loadFragmentPoints(
-            IMetaCache cache) throws Exception {
+        IMetaCache cache) throws Exception {
         Map<FragmentMeta, Long> writePointsMap = new HashMap<>();
         if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_POINTS_PREFIX) != null) {
             List<String> children = client.getChildren().forPath(STATISTICS_FRAGMENT_POINTS_PREFIX);
             for (String child : children) {
                 TimeSeriesInterval timeSeriesInterval = TimeSeriesInterval.fromString(child);
                 List<FragmentMeta> fragmentMetas = cache
-                        .getFragmentMapByExactTimeSeriesInterval(timeSeriesInterval);
+                    .getFragmentMapByExactTimeSeriesInterval(timeSeriesInterval);
 
                 List<String> timeIntervals = client.getChildren()
-                        .forPath(STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + child);
+                    .forPath(STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + child);
 
                 for (String timeInterval : timeIntervals) {
                     long startTime = Long.parseLong(timeInterval);
                     for (FragmentMeta fragmentMeta : fragmentMetas) {
                         if (fragmentMeta.getTimeInterval().getStartTime() == startTime) {
                             byte[] data = this.client.getData()
-                                    .forPath(STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + child + "/" + timeInterval);
+                                .forPath(STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + child + "/" + timeInterval);
                             long points = JsonUtils.fromJson(data, Long.class);
                             writePointsMap.put(fragmentMeta, points);
                         }
@@ -1580,10 +1580,10 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
 
     @Override
     public void deleteFragmentPoints(TimeSeriesInterval tsInterval, TimeInterval timeInterval)
-            throws Exception {
+        throws Exception {
         String path =
-                STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + tsInterval.toString() + "/" + timeInterval
-                        .toString();
+            STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + tsInterval.toString() + "/" + timeInterval
+                .toString();
         if (this.client.checkExists().forPath(path) != null) {
             this.client.delete().forPath(path);
         }
@@ -1592,11 +1592,11 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     @Override
     public void updateFragmentPoints(FragmentMeta fragmentMeta, long points) throws Exception {
         String path =
-                STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + fragmentMeta.getTsInterval()
-                        .toString() + "/" + fragmentMeta.getTimeInterval().toString();
+            STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + fragmentMeta.getTsInterval()
+                .toString() + "/" + fragmentMeta.getTimeInterval().toString();
         if (this.client.checkExists().forPath(path) == null) {
             this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(path, JsonUtils.toJson(points));
+                .forPath(path, JsonUtils.toJson(points));
         } else {
             this.client.setData().forPath(path, JsonUtils.toJson(points));
         }
@@ -1607,11 +1607,11 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_WRITE) != null) {
                 this.client.delete().deletingChildrenIfNeeded()
-                        .forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_WRITE);
+                    .forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_WRITE);
             }
             if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ) != null) {
                 this.client.delete().deletingChildrenIfNeeded()
-                        .forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ);
+                    .forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ);
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when removing fragment requests: ", e);
@@ -1626,8 +1626,8 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         } catch (Exception e) {
             fragmentRequestsCounterMutexLock.unlock();
             throw new MetaStorageException(
-                    "encounter error when acquiring fragment requests counter mutex: ",
-                    e);
+                "encounter error when acquiring fragment requests counter mutex: ",
+                e);
         }
     }
 
@@ -1636,17 +1636,17 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX, JsonUtils.toJson(1));
+                    .forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX, JsonUtils.toJson(1));
             } else {
                 int counter = JsonUtils.fromJson(
-                        this.client.getData().forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX),
-                        Integer.class);
+                    this.client.getData().forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX),
+                    Integer.class);
                 this.client.setData()
-                        .forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX, JsonUtils.toJson(counter + 1));
+                    .forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX, JsonUtils.toJson(counter + 1));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when updating monitor clear counter: ",
-                    e);
+                e);
         }
     }
 
@@ -1657,8 +1657,8 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 return 0;
             } else {
                 return JsonUtils.fromJson(
-                        this.client.getData().forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX),
-                        Integer.class);
+                    this.client.getData().forPath(STATISTICS_MONITOR_CLEAR_COUNTER_PREFIX),
+                    Integer.class);
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when get monitor clear counter: ", e);
@@ -1670,17 +1670,17 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX, JsonUtils.toJson(1));
+                    .forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX, JsonUtils.toJson(1));
             } else {
                 int counter = JsonUtils.fromJson(
-                        this.client.getData().forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX),
-                        Integer.class);
+                    this.client.getData().forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX),
+                    Integer.class);
                 this.client.setData()
-                        .forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX, JsonUtils.toJson(counter + 1));
+                    .forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX, JsonUtils.toJson(counter + 1));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when updating fragment requests counter: ",
-                    e);
+                e);
         }
     }
 
@@ -1689,14 +1689,14 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX, JsonUtils.toJson(0));
+                    .forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX, JsonUtils.toJson(0));
             } else {
                 this.client.setData()
-                        .forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX, JsonUtils.toJson(0));
+                    .forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX, JsonUtils.toJson(0));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when resetting fragment requests counter: ",
-                    e);
+                e);
         }
     }
 
@@ -1706,7 +1706,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             fragmentRequestsCounterMutex.release();
         } catch (Exception e) {
             throw new MetaStorageException(
-                    "encounter error when releasing fragment requests counter mutex: ", e);
+                "encounter error when releasing fragment requests counter mutex: ", e);
         } finally {
             fragmentRequestsCounterMutexLock.unlock();
         }
@@ -1719,8 +1719,8 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 return 0;
             } else {
                 return JsonUtils.fromJson(
-                        this.client.getData().forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX),
-                        Integer.class);
+                    this.client.getData().forPath(STATISTICS_FRAGMENT_REQUESTS_COUNTER_PREFIX),
+                    Integer.class);
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when get fragment requests counter: ", e);
@@ -1732,57 +1732,57 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                                    Map<FragmentMeta, Long> readHotspotMap) throws Exception {
         for (Entry<FragmentMeta, Long> writeHotspotEntry : writeHotspotMap.entrySet()) {
             String path =
-                    STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE + "/" + writeHotspotEntry.getKey().getTsInterval()
-                            .toString() + "/" + writeHotspotEntry.getKey().getTimeInterval().toString();
+                STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE + "/" + writeHotspotEntry.getKey().getTsInterval()
+                    .toString() + "/" + writeHotspotEntry.getKey().getTimeInterval().toString();
             if (this.client.checkExists().forPath(path) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(path, JsonUtils.toJson(writeHotspotEntry.getValue()));
+                    .forPath(path, JsonUtils.toJson(writeHotspotEntry.getValue()));
             } else {
                 byte[] data = this.client.getData().forPath(path);
                 long heat = JsonUtils.fromJson(data, Long.class);
                 this.client.setData()
-                        .forPath(path, JsonUtils.toJson(heat + writeHotspotEntry.getValue()));
+                    .forPath(path, JsonUtils.toJson(heat + writeHotspotEntry.getValue()));
             }
         }
         for (Entry<FragmentMeta, Long> readHotspotEntry : readHotspotMap.entrySet()) {
             String path =
-                    STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + readHotspotEntry.getKey().getTsInterval()
-                            .toString() + "/" + readHotspotEntry.getKey().getTimeInterval().toString() + "/" + readHotspotEntry.getKey().getMasterStorageUnit().getStorageEngineId();
+                STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + readHotspotEntry.getKey().getTsInterval()
+                    .toString() + "/" + readHotspotEntry.getKey().getTimeInterval().toString() + "/" + readHotspotEntry.getKey().getMasterStorageUnitId();
             if (this.client.checkExists().forPath(path) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(path, JsonUtils.toJson(readHotspotEntry.getValue()));
+                    .forPath(path, JsonUtils.toJson(readHotspotEntry.getValue()));
             } else {
                 byte[] data = this.client.getData().forPath(path);
                 long heat = JsonUtils.fromJson(data, Long.class);
                 this.client.setData()
-                        .forPath(path, JsonUtils.toJson(heat + readHotspotEntry.getValue()));
+                    .forPath(path, JsonUtils.toJson(heat + readHotspotEntry.getValue()));
             }
         }
     }
 
     @Override
     public Pair<Map<FragmentMeta, Long>, Map<FragmentMeta, Long>> loadFragmentHeat(
-            IMetaCache cache)
-            throws Exception {
+        IMetaCache cache)
+        throws Exception {
         Map<FragmentMeta, Long> writeHotspotMap = new HashMap<>();
         if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE) != null) {
             List<String> children = client.getChildren().forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE);
             for (String child : children) {
                 TimeSeriesInterval timeSeriesInterval = TimeSeriesInterval.fromString(child);
                 Map<TimeSeriesInterval, List<FragmentMeta>> fragmentMapOfTimeSeriesInterval = cache
-                        .getFragmentMapByTimeSeriesInterval(timeSeriesInterval);
+                    .getFragmentMapByTimeSeriesInterval(timeSeriesInterval);
                 List<FragmentMeta> fragmentMetas = fragmentMapOfTimeSeriesInterval.get(timeSeriesInterval);
 
                 if (fragmentMetas != null) {
                     List<String> timeIntervals = client.getChildren()
-                            .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE + "/" + child);
+                        .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE + "/" + child);
                     for (String timeInterval : timeIntervals) {
                         long startTime = Long.parseLong(timeInterval);
                         for (FragmentMeta fragmentMeta : fragmentMetas) {
                             if (fragmentMeta.getTimeInterval().getStartTime() == startTime) {
                                 byte[] data = this.client.getData()
-                                        .forPath(
-                                                STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE + "/" + child + "/" + timeInterval);
+                                    .forPath(
+                                        STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE + "/" + child + "/" + timeInterval);
                                 long heat = JsonUtils.fromJson(data, Long.class);
                                 writeHotspotMap.put(fragmentMeta, heat);
                             }
@@ -1798,12 +1798,12 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             for (String child : children) {
                 TimeSeriesInterval timeSeriesInterval = TimeSeriesInterval.fromString(child);
                 Map<TimeSeriesInterval, List<FragmentMeta>> fragmentMapOfTimeSeriesInterval = cache
-                        .getFragmentMapByTimeSeriesInterval(timeSeriesInterval);
+                    .getFragmentMapByTimeSeriesInterval(timeSeriesInterval);
                 List<FragmentMeta> fragmentMetas = fragmentMapOfTimeSeriesInterval.get(timeSeriesInterval);
 
                 if (fragmentMetas != null) {
                     List<String> timeIntervals = client.getChildren()
-                            .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child);
+                        .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child);
                     for (String timeInterval : timeIntervals) {
                         long startTime = Long.parseLong(timeInterval);
                         for (FragmentMeta fragmentMeta : fragmentMetas) {
@@ -1811,14 +1811,20 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                                 List<String> storageUnitIds = client.getChildren().forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child + "/" + timeInterval);
                                 // 考虑可定制化副本
                                 List<FragmentMeta> customizableReplicaFragmentList = cache.getCustomizableReplicaFragmentList(fragmentMeta);
-                                for (String storageUnitIdStr : storageUnitIds) {
-                                    long storageUnitId = Long.parseLong(storageUnitIdStr);
-                                    for (FragmentMeta customizableReplicaFragment : customizableReplicaFragmentList) {
-                                        if (customizableReplicaFragment.getMasterStorageUnit().getStorageEngineId() == storageUnitId) {
-                                            byte[] data = this.client.getData()
-                                                .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child + "/" + timeInterval + "/" + storageUnitIdStr);
-                                            long heat = JsonUtils.fromJson(data, Long.class);
-                                            readHotspotMap.put(fragmentMeta, heat);
+                                if (customizableReplicaFragmentList.isEmpty()) {
+                                    byte[] data = this.client.getData()
+                                        .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child + "/" + timeInterval + "/" + storageUnitIds.get(0));
+                                    long heat = JsonUtils.fromJson(data, Long.class);
+                                    readHotspotMap.put(fragmentMeta, heat);
+                                } else {
+                                    for (String storageUnitId : storageUnitIds) {
+                                        for (FragmentMeta customizableReplicaFragment : customizableReplicaFragmentList) {
+                                            if (customizableReplicaFragment.getMasterStorageUnitId().equals(storageUnitId)) {
+                                                byte[] data = this.client.getData()
+                                                    .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ + "/" + child + "/" + timeInterval + "/" + storageUnitId);
+                                                long heat = JsonUtils.fromJson(data, Long.class);
+                                                readHotspotMap.put(customizableReplicaFragment, heat);
+                                            }
                                         }
                                     }
                                 }
@@ -1836,11 +1842,11 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE) != null) {
                 this.client.delete().deletingChildrenIfNeeded()
-                        .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE);
+                    .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_WRITE);
             }
             if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ) != null) {
                 this.client.delete().deletingChildrenIfNeeded()
-                        .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ);
+                    .forPath(STATISTICS_FRAGMENT_HEAT_PREFIX_READ);
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when removing fragment heat: ", e);
@@ -1855,7 +1861,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         } catch (Exception e) {
             fragmentHeatCounterMutexLock.unlock();
             throw new MetaStorageException("encounter error when acquiring fragment heat counter mutex: ",
-                    e);
+                e);
         }
     }
 
@@ -1863,16 +1869,13 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     public void incrementFragmentHeatCounter() throws MetaStorageException {
         try {
             if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX) == null) {
-                logger.error("create FragmentHeatCounter");
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX, JsonUtils.toJson(1));
+                    .forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX, JsonUtils.toJson(1));
             } else {
-                logger.error("inc FragmentHeatCounter");
                 int counter = JsonUtils.fromJson(
-                        this.client.getData().forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX), Integer.class);
-                logger.error("counter=" + counter);
+                    this.client.getData().forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX), Integer.class);
                 this.client.setData()
-                        .forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX, JsonUtils.toJson(counter + 1));
+                    .forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX, JsonUtils.toJson(counter + 1));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when updating fragment heat counter: ", e);
@@ -1884,10 +1887,10 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX, JsonUtils.toJson(0));
+                    .forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX, JsonUtils.toJson(0));
             } else {
                 this.client.setData()
-                        .forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX, JsonUtils.toJson(0));
+                    .forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX, JsonUtils.toJson(0));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when resetting fragment heat counter: ", e);
@@ -1912,7 +1915,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 return 0;
             } else {
                 return JsonUtils.fromJson(
-                        this.client.getData().forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX), Integer.class);
+                    this.client.getData().forPath(STATISTICS_FRAGMENT_HEAT_COUNTER_PREFIX), Integer.class);
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when get fragment heat counter: ", e);
@@ -1925,15 +1928,15 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             ReshardStatus status;
             if (this.client.checkExists().forPath(RESHARD_STATUS_NODE_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(RESHARD_STATUS_NODE_PREFIX, JsonUtils.toJson(EXECUTING));
+                    .forPath(RESHARD_STATUS_NODE_PREFIX, JsonUtils.toJson(EXECUTING));
                 return true;
             } else {
                 status = JsonUtils.fromJson(
-                        this.client.getData().forPath(RESHARD_STATUS_NODE_PREFIX), ReshardStatus.class);
+                    this.client.getData().forPath(RESHARD_STATUS_NODE_PREFIX), ReshardStatus.class);
                 logger.error("status={}", status);
                 if (status.equals(NON_RESHARDING) || status.equals(JUDGING)) {
                     this.client.setData()
-                            .forPath(RESHARD_STATUS_NODE_PREFIX, JsonUtils.toJson(EXECUTING));
+                        .forPath(RESHARD_STATUS_NODE_PREFIX, JsonUtils.toJson(EXECUTING));
                     return true;
                 }
                 return false;
@@ -1959,10 +1962,10 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(RESHARD_STATUS_NODE_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(RESHARD_STATUS_NODE_PREFIX, JsonUtils.toJson(status));
+                    .forPath(RESHARD_STATUS_NODE_PREFIX, JsonUtils.toJson(status));
             } else {
                 this.client.setData()
-                        .forPath(RESHARD_STATUS_NODE_PREFIX, JsonUtils.toJson(status));
+                    .forPath(RESHARD_STATUS_NODE_PREFIX, JsonUtils.toJson(status));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when updating reshard status: ", e);
@@ -2032,12 +2035,12 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(RESHARD_COUNTER_NODE_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(RESHARD_COUNTER_NODE_PREFIX, JsonUtils.toJson(1));
+                    .forPath(RESHARD_COUNTER_NODE_PREFIX, JsonUtils.toJson(1));
             } else {
                 int counter = JsonUtils.fromJson(
-                        this.client.getData().forPath(RESHARD_COUNTER_NODE_PREFIX), Integer.class);
+                    this.client.getData().forPath(RESHARD_COUNTER_NODE_PREFIX), Integer.class);
                 this.client.setData()
-                        .forPath(RESHARD_COUNTER_NODE_PREFIX, JsonUtils.toJson(counter + 1));
+                    .forPath(RESHARD_COUNTER_NODE_PREFIX, JsonUtils.toJson(counter + 1));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when updating reshard counter: ", e);
@@ -2049,10 +2052,10 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         try {
             if (this.client.checkExists().forPath(RESHARD_COUNTER_NODE_PREFIX) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(RESHARD_COUNTER_NODE_PREFIX, JsonUtils.toJson(0));
+                    .forPath(RESHARD_COUNTER_NODE_PREFIX, JsonUtils.toJson(0));
             } else {
                 this.client.setData()
-                        .forPath(RESHARD_COUNTER_NODE_PREFIX, JsonUtils.toJson(0));
+                    .forPath(RESHARD_COUNTER_NODE_PREFIX, JsonUtils.toJson(0));
             }
         } catch (Exception e) {
             throw new MetaStorageException("encounter error when resetting reshard counter: ", e);
@@ -2088,7 +2091,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
 
     private void registerMaxActiveEndTimeStatisticsListener() throws Exception {
         this.maxActiveEndTimeStatisticsCache = new TreeCache(this.client,
-                MAX_ACTIVE_END_TIME_STATISTICS_NODE_PREFIX);
+            MAX_ACTIVE_END_TIME_STATISTICS_NODE_PREFIX);
         TreeCacheListener listener = (curatorFramework, event) -> {
             if (maxActiveEndTimeStatisticsChangeHook == null) {
                 return;
@@ -2123,25 +2126,25 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         } catch (Exception e) {
             maxActiveEndTimeStatisticsMutexLock.unlock();
             throw new MetaStorageException(
-                    "encounter error when acquiring mac active end time statistics mutex: ", e);
+                "encounter error when acquiring mac active end time statistics mutex: ", e);
         }
     }
 
     @Override
     public void addOrUpdateMaxActiveEndTimeStatistics(long endTime)
-            throws MetaStorageException {
+        throws MetaStorageException {
         try {
             if (this.client.checkExists()
-                    .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE) == null) {
+                .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE) == null) {
                 this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                        .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE, JsonUtils.toJson(endTime));
+                    .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE, JsonUtils.toJson(endTime));
             } else {
                 this.client.setData()
-                        .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE, JsonUtils.toJson(endTime));
+                    .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE, JsonUtils.toJson(endTime));
             }
         } catch (Exception e) {
             throw new MetaStorageException(
-                    "encounter error when adding or updating max active end time statistics: ", e);
+                "encounter error when adding or updating max active end time statistics: ", e);
         }
     }
 
@@ -2149,15 +2152,15 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     public long getMaxActiveEndTimeStatistics() throws MetaStorageException {
         try {
             if (this.client.checkExists()
-                    .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE) != null) {
+                .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE) != null) {
                 return JsonUtils.fromJson(
-                        this.client.getData()
-                                .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE),
-                        Long.class);
+                    this.client.getData()
+                        .forPath(MAX_ACTIVE_END_TIME_STATISTICS_NODE),
+                    Long.class);
             }
         } catch (Exception e) {
             throw new MetaStorageException(
-                    "encounter error when adding or updating max active end time statistics: ", e);
+                "encounter error when adding or updating max active end time statistics: ", e);
         }
         return -1;
     }
@@ -2168,7 +2171,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             maxActiveEndTimeStatisticsMutex.release();
         } catch (Exception e) {
             throw new MetaStorageException(
-                    "encounter error when releasing max active end time statistics mutex: ", e);
+                "encounter error when releasing max active end time statistics mutex: ", e);
         } finally {
             maxActiveEndTimeStatisticsMutexLock.unlock();
         }
@@ -2176,7 +2179,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
 
     @Override
     public void registerMaxActiveEndTimeStatisticsChangeHook(
-            MaxActiveEndTimeStatisticsChangeHook hook) throws MetaStorageException {
+        MaxActiveEndTimeStatisticsChangeHook hook) throws MetaStorageException {
         this.maxActiveEndTimeStatisticsChangeHook = hook;
     }
 
@@ -2184,9 +2187,9 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     public void addCustomizableReplicaFragmentMeta(FragmentMeta sourceFragment, List<FragmentMeta> replicaFragment) throws MetaStorageException {
         try {
             this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX + "/" + sourceFragment.getTsInterval().toString() + "/" + sourceFragment.getTimeInterval().toString() + "/source", JsonUtils.toJson(sourceFragment));
+                .forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX + "/" + sourceFragment.getTsInterval().toString() + "/" + sourceFragment.getTimeInterval().toString() + "/source", JsonUtils.toJson(sourceFragment));
             this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX + "/" + sourceFragment.getTsInterval().toString() + "/" + sourceFragment.getTimeInterval().toString() + "/replica", JsonUtils.toJson(replicaFragment));
+                .forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX + "/" + sourceFragment.getTsInterval().toString() + "/" + sourceFragment.getTimeInterval().toString() + "/replica", JsonUtils.toJson(replicaFragment));
         } catch (Exception e) {
             throw new MetaStorageException("get error when add customizable replica fragment", e);
         }
@@ -2217,9 +2220,9 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                     List<String> timeIntervalNames = this.client.getChildren().forPath(FRAGMENT_NODE_PREFIX + "/" + tsIntervalName);
                     for (String timeIntervalName : timeIntervalNames) {
                         FragmentMeta fragmentMeta = JsonUtils.fromJson(this.client.getData()
-                                .forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName + "/source"), FragmentMeta.class);
+                            .forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName + "/source"), FragmentMeta.class);
                         List<FragmentMeta> replicaFragment = JsonUtils.fromJson(this.client.getData()
-                                .forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName + "/replica"), List.class);
+                            .forPath(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX + "/" + tsIntervalName + "/" + timeIntervalName + "/replica"), List.class);
                         fragmentListMap.put(fragmentMeta, replicaFragment);
                     }
                 }

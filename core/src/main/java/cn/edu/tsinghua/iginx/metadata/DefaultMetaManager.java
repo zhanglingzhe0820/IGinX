@@ -1259,16 +1259,6 @@ public class DefaultMetaManager implements IMetaManager {
     @Override
     public void clearMonitors() {
         try {
-//      incMonitors();
-            int time = 0;
-//      while (!isAllMonitorsClearing()) {
-//        Thread.sleep(100);
-//        time++;
-//        if (time > 20) {
-//          logger.error("wait time more than {} ms", time * 20);
-//          return;
-//        }
-//      }
             Thread.sleep(1000);
             if (getIginxList().get(0).getId() == getIginxId()) {
                 storage.lockFragmentRequestsCounter();
@@ -1289,7 +1279,6 @@ public class DefaultMetaManager implements IMetaManager {
             HotSpotMonitor.getInstance().clear();
             RequestsMonitor.getInstance().clear();
             TimeseriesMonitor.getInstance().clear();
-//      storage.resetMonitorClearCounter();
         } catch (Exception e) {
             logger.error("encounter error when clear monitors: ", e);
         }

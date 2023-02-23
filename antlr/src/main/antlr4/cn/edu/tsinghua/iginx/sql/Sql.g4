@@ -23,6 +23,7 @@ statement
     | SHOW TRANSFORM JOB STATUS jobId=INT #showJobStatusStatement
     | CANCEL TRANSFORM JOB jobId=INT #cancelJobStatement
     | SHOW jobStatus TRANSFORM JOB #showEligibleJobStatement
+    | STOP MIGRATION #stopMigrationStatement
     ;
 
 queryClause
@@ -309,6 +310,8 @@ keyWords
     | WITH_PRECISE
     | TIME_OFFSET
     | CANCEL
+    | STOP
+    | MIGRATION
     ;
 
 dateFormat
@@ -627,6 +630,14 @@ CLOSING
 
 CLOSED
     : C L O S E D
+    ;
+
+STOP
+    : S T O P
+    ;
+
+MIGRATION
+    : M I G R A T I O N
     ;
 //============================
 // End of the keywords list

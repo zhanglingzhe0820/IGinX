@@ -319,6 +319,11 @@ public class IginXSqlVisitor extends SqlBaseVisitor<Statement> {
         return new ShowEligibleJobStatement(jobState);
     }
 
+    @Override
+    public Statement visitStopMigrationStatement(StopMigrationStatementContext ctx) {
+        return new StopMigrationStatement();
+    }
+
     private void parseSelectPaths(SelectClauseContext ctx, SelectStatement selectStatement) {
         List<ExpressionContext> expressions = ctx.expression();
 

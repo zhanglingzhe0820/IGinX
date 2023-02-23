@@ -166,7 +166,7 @@ public final class FragmentMeta {
 
     @Override
     public int hashCode() {
-        return Objects.hash(timeInterval, tsInterval);
+        return Objects.hash(timeInterval, tsInterval, masterStorageUnitId);
     }
 
     public boolean isInitialFragment() {

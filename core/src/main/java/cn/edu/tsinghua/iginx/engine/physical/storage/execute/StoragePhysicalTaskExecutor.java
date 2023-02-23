@@ -132,13 +132,14 @@ public class StoragePhysicalTaskExecutor {
                             submittedRequests.incrementAndGet();
                             try {
                                 // 如果是查询请求，可能有可配置化副本，随机发送到任何一个副本上
+                                boolean isHit = false;
                                 if (!task.getOperators().isEmpty() && task.getOperators().get(0).getType() == OperatorType.Project) {
                                     FragmentMeta fragment = task.getTargetFragment();
                                     if (fragment != null) {
                                         List<FragmentMeta> fragmentMetas = DefaultMetaCache.getInstance().getCustomizableReplicaFragmentList(fragment);
                                         if (!fragmentMetas.isEmpty()) {
                                             int randomIndex = new Random().nextInt(fragmentMetas.size());
-                                            logger.error("query hit fragment = {}", fragmentMetas.get(randomIndex));
+                                            isHit = true;
                                             task.setTargetFragment(fragmentMetas.get(randomIndex));
                                         } else {
 //                                            logger.error("query is not hit fragment = {}", fragment);
@@ -146,6 +147,9 @@ public class StoragePhysicalTaskExecutor {
                                     }
                                 }
                                 result = pair.k.execute(task);
+//                                if (isHit) {
+//                                    logger.error("query hit fragment = {}, result num = {}", task.getTargetFragment(), result.getRowStream().getHeader().getFields());
+//                                }
                             } catch (Exception e) {
                                 logger.error("execute task error: ", e);
                                 result = new TaskExecuteResult(new PhysicalException(e));
