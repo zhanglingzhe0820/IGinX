@@ -434,9 +434,9 @@ public class DynamicPolicy implements IPolicy {
                 TimeseriesMonitor.getInstance().stop();
                 metaManager.updateTimeseriesHeat(TimeseriesMonitor.getInstance().getTimeseriesLoadMap());
                 //等待收集完成
-                while (!metaManager.isAllTimeseriesMonitorsCompleteCollection()) {
-                    Thread.sleep(1000);
-                }
+//                while (!metaManager.isAllTimeseriesMonitorsCompleteCollection()) {
+//                    Thread.sleep(1000);
+//                }
                 long totalHeat = 0L;
                 // 这里需要根据timeseries提前sort
                 Map<String, Long> timeseriesHeat = new TreeMap<>(metaManager.loadTimeseriesHeat());

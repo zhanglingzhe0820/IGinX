@@ -743,7 +743,7 @@ public class DefaultMetaManager implements IMetaManager {
     public void updateFragmentByTsInterval(TimeSeriesInterval tsInterval, FragmentMeta fragmentMeta) {
         try {
             storage.lockFragment();
-            cache.updateFragmentByTsInterval(tsInterval, fragmentMeta);
+            // 更新fragment内部信息不需要更新cache
             storage.updateFragmentByTsInterval(tsInterval, fragmentMeta);
         } catch (Exception e) {
             logger.error("update fragment error: ", e);
