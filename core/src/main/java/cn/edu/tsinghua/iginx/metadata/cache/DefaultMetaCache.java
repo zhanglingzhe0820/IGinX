@@ -533,7 +533,6 @@ public class DefaultMetaCache implements IMetaCache {
     public StorageUnitMeta getStorageUnit(String id) {
         StorageUnitMeta storageUnit;
         storageUnitLock.readLock().lock();
-        logger.error("storageUnitMetaMap = {}", storageUnitMetaMap);
         storageUnit = storageUnitMetaMap.get(id);
         if (storageUnit == null) {
             storageUnit = dummyStorageUnitMetaMap.get(id);

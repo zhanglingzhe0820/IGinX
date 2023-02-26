@@ -133,7 +133,7 @@ public class DefaultMetaManager implements IMetaManager {
             initUser();
             initTransform();
             initMaxActiveEndTimeStatistics();
-            recover();
+//            recover();
         } catch (MetaStorageException e) {
             logger.error("init meta manager error: ", e);
             System.exit(-1);
@@ -260,7 +260,12 @@ public class DefaultMetaManager implements IMetaManager {
             if (!cache.hasFragment()) {
                 return;
             }
-            fragment.setMasterStorageUnit(cache.getStorageUnit(fragment.getMasterStorageUnitId()));
+            try {
+                fragment.setMasterStorageUnit(cache.getStorageUnit(fragment.getMasterStorageUnitId()));
+            } catch (Exception e) {
+                logger.error("fragment = {}", fragment);
+                logger.error("storageUnitList = {}", cache.getStorageUnits());
+            }
             if (create) {
                 cache.addFragment(fragment);
             } else {
@@ -358,7 +363,11 @@ public class DefaultMetaManager implements IMetaManager {
                         cache.initStorageUnit(storageUnits);
                         storageUnitMeta = cache.getStorageUnit(fragmentMeta.getMasterStorageUnitId());
                     }
-                    fragmentMeta.setMasterStorageUnit(storageUnitMeta);
+                    try {
+                        fragmentMeta.setMasterStorageUnit(storageUnitMeta);
+                    } catch (Exception e) {
+                        logger.error("storageUnitList = {}", cache.getStorageUnits());
+                    }
                 }
                 cache.addCustomizableReplicaFragmentMeta(sourceFragment, replicaFragments);
             }
