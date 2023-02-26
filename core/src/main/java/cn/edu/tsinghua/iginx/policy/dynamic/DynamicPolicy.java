@@ -428,20 +428,22 @@ public class DynamicPolicy implements IPolicy {
                 MigrationManager.getInstance().getMigration()
                     .reshardWriteByTimeseries(fragmentMeta, points);
             } else {
-                TimeseriesMonitor.getInstance().setTargetFragmentMeta(fragmentMeta);
                 TimeseriesMonitor.getInstance().start();
                 Thread.sleep(timeseriesloadBalanceCheckInterval * 1000L);
                 TimeseriesMonitor.getInstance().stop();
-                metaManager.updateTimeseriesHeat(TimeseriesMonitor.getInstance().getTimeseriesLoadMap());
                 //等待收集完成
-//                while (!metaManager.isAllTimeseriesMonitorsCompleteCollection()) {
-//                    Thread.sleep(1000);
-//                }
+                while (!metaManager.isAllTimeseriesMonitorsCompleteCollection()) {
+                    Thread.sleep(1000);
+                }
                 long totalHeat = 0L;
                 // 这里需要根据timeseries提前sort
-                Map<String, Long> timeseriesHeat = new TreeMap<>(metaManager.loadTimeseriesHeat());
-                for (Entry<String, Long> timeseriesHeatEntry : timeseriesHeat.entrySet()) {
-                    totalHeat += timeseriesHeatEntry.getValue();
+                Map<String, Long> rawTimeseriesHeatMap = metaManager.loadTimeseriesHeat();
+                Map<String, Long> timeseriesHeat = new TreeMap<>();
+                for (Entry<String, Long> timeseriesHeatEntry : rawTimeseriesHeatMap.entrySet()) {
+                    if (fragmentMeta.getTsInterval().isContain(timeseriesHeatEntry.getKey())) {
+                        totalHeat += timeseriesHeatEntry.getValue();
+                        timeseriesHeat.put(timeseriesHeatEntry.getKey(), timeseriesHeatEntry.getValue());
+                    }
                 }
 
                 double averageHeat = totalHeat * 1.0 / timeseriesHeat.size();

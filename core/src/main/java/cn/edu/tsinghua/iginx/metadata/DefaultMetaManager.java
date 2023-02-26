@@ -29,6 +29,7 @@ import cn.edu.tsinghua.iginx.exceptions.MetaStorageException;
 import cn.edu.tsinghua.iginx.metadata.cache.DefaultMetaCache;
 import cn.edu.tsinghua.iginx.metadata.cache.IMetaCache;
 import cn.edu.tsinghua.iginx.metadata.entity.*;
+import cn.edu.tsinghua.iginx.metadata.hook.CustomizableReplicaFragmentChangeHook;
 import cn.edu.tsinghua.iginx.metadata.hook.StorageEngineChangeHook;
 import cn.edu.tsinghua.iginx.metadata.hook.StorageUnitHook;
 import cn.edu.tsinghua.iginx.metadata.storage.IMetaStorage;
@@ -84,6 +85,9 @@ public class DefaultMetaManager implements IMetaManager {
     // 在重分片过程中，是否为提出者
     private boolean isProposer = false;
 
+    // 是否开启时间序列级别的信息收集
+    private boolean isStartTimeseriesMonitor = false;
+
     private DefaultMetaManager() {
         cache = DefaultMetaCache.getInstance();
 
@@ -119,6 +123,8 @@ public class DefaultMetaManager implements IMetaManager {
             initIginx();
             initReshardStatus();
             initReshardCounter();
+            initEnableTimeseriesMonitor();
+            initCustomizableReplicaFragment();
             initStorageEngine();
             initStorageUnit();
             initFragment();
@@ -326,6 +332,33 @@ public class DefaultMetaManager implements IMetaManager {
         for (TransformTaskMeta task : storage.loadTransformTask()) {
             cache.addOrUpdateTransformTask(task);
         }
+    }
+
+    private void initEnableTimeseriesMonitor() throws MetaStorageException {
+        storage.registerEnableTimeseriesMonitorChangeHook(((isEnable) -> {
+            if (isEnable) {
+                this.isStartTimeseriesMonitor = true;
+            } else {
+                this.isStartTimeseriesMonitor = false;
+                DefaultMetaManager.getInstance().updateTimeseriesHeat(TimeseriesMonitor.getInstance().getTimeseriesLoadMap());
+            }
+        }));
+    }
+
+    private void initCustomizableReplicaFragment() {
+        storage.registerCustomizableReplicaFragmentChangeHook(new CustomizableReplicaFragmentChangeHook() {
+            @Override
+            public void onChange(FragmentMeta sourceFragment, List<FragmentMeta> replicaFragments) {
+                logger.error("zk add CustomizableReplicaFragment source = {}", sourceFragment);
+                logger.error("zk add CustomizableReplicaFragment replica = {}", replicaFragments);
+                cache.addCustomizableReplicaFragmentMeta(sourceFragment, replicaFragments);
+            }
+
+            @Override
+            public void onRemove(FragmentMeta sourceFragment) {
+                cache.removeCustomizableReplicaFragmentMeta(sourceFragment);
+            }
+        });
     }
 
     @Override
@@ -1233,11 +1266,8 @@ public class DefaultMetaManager implements IMetaManager {
     public boolean isAllMonitorsCompleteCollection() {
         try {
             int fragmentRequestsCount = storage.getFragmentRequestsCounter();
-            logger.error("fragmentRequestsCount = {}", fragmentRequestsCount);
             int fragmentHeatCount = storage.getFragmentHeatCounter();
-            logger.error("fragmentHeatCount = {}", fragmentHeatCount);
             int count = getIginxList().size();
-            logger.error("getIginxList().size() = {}", count);
             return fragmentRequestsCount >= count && fragmentHeatCount >= count;
         } catch (MetaStorageException e) {
             logger.error("encounter error when get monitor counter: ", e);
@@ -1278,7 +1308,9 @@ public class DefaultMetaManager implements IMetaManager {
             }
             HotSpotMonitor.getInstance().clear();
             RequestsMonitor.getInstance().clear();
-            TimeseriesMonitor.getInstance().clear();
+            if (!isStartTimeseriesMonitor) {
+                TimeseriesMonitor.getInstance().clear();
+            }
         } catch (Exception e) {
             logger.error("encounter error when clear monitors: ", e);
         }
@@ -1565,5 +1597,18 @@ public class DefaultMetaManager implements IMetaManager {
         } catch (MetaStorageException e) {
             logger.error("encounter error when submitting max active time: ", e);
         }
+    }
+
+    public void setStartTimeseriesMonitor(boolean startTimeseriesMonitor) {
+        isStartTimeseriesMonitor = startTimeseriesMonitor;
+        try {
+            storage.updateEnableTimeseriesMonitor(startTimeseriesMonitor);
+        } catch (MetaStorageException e) {
+            logger.error("encounter error when set start timeseries monitor: ", e);
+        }
+    }
+
+    public boolean isStartTimeseriesMonitor() {
+        return isStartTimeseriesMonitor;
     }
 }

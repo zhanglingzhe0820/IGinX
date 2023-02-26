@@ -106,6 +106,10 @@ public interface IMetaStorage {
 
     void registerTransformChangeHook(TransformChangeHook hook);
 
+    void registerEnableTimeseriesMonitorChangeHook(EnableTimeseriesMonitorChangeHook hook);
+
+    void updateEnableTimeseriesMonitor(boolean isEnable) throws MetaStorageException;
+
     List<TransformTaskMeta> loadTransformTask() throws MetaStorageException;
 
     void addTransformTask(TransformTaskMeta transformTask) throws MetaStorageException;
@@ -211,4 +215,6 @@ public interface IMetaStorage {
     void removeCustomizableReplicaFragmentMeta(FragmentMeta sourceFragment) throws MetaStorageException;
 
     Map<FragmentMeta, List<FragmentMeta>> getCustomizableReplicaFragmentMetaList() throws MetaStorageException;
+
+    void registerCustomizableReplicaFragmentChangeHook(CustomizableReplicaFragmentChangeHook hook);
 }

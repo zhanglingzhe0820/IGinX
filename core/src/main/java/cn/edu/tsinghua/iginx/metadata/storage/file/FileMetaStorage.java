@@ -778,6 +778,16 @@ public class FileMetaStorage implements IMetaStorage {
     }
 
     @Override
+    public void registerEnableTimeseriesMonitorChangeHook(EnableTimeseriesMonitorChangeHook hook) {
+
+    }
+
+    @Override
+    public void updateEnableTimeseriesMonitor(boolean isEnable) throws MetaStorageException {
+
+    }
+
+    @Override
     public List<TransformTaskMeta> loadTransformTask() throws MetaStorageException {
         Map<String, TransformTaskMeta> taskMetaMap = new HashMap<>();
 
@@ -874,5 +884,10 @@ public class FileMetaStorage implements IMetaStorage {
     @Override
     public Map<FragmentMeta, List<FragmentMeta>> getCustomizableReplicaFragmentMetaList() throws MetaStorageException {
         return null;
+    }
+
+    @Override
+    public void registerCustomizableReplicaFragmentChangeHook(CustomizableReplicaFragmentChangeHook hook) {
+
     }
 }

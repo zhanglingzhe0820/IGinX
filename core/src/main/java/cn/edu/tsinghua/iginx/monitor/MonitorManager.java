@@ -107,7 +107,6 @@ public class MonitorManager implements Runnable {
                 //清空节点信息
                 metaManager.clearMonitors();
                 Thread.sleep(interval * 1000L);
-                logger.error("start to report monitor statistics");
 
                 //发起负载均衡判断
                 metaManager.updateFragmentRequests(RequestsMonitor.getInstance().getWriteRequestsMap(),
@@ -137,8 +136,9 @@ public class MonitorManager implements Runnable {
 
                 metaManager.updateFragmentHeat(filterAndGetHeatMap(writeCostList), filterAndGetHeatMap(readCostList));
                 //等待收集完成
-                Thread.sleep(1000);
-//        logger.error("start to load fragments heat");
+                while (!metaManager.isAllMonitorsCompleteCollection()) {
+                    Thread.sleep(1000);
+                }
 
                 // 为了性能和方便，当前仅第一个节点可进行负载均衡及判断
                 if (DefaultMetaManager.getInstance().getIginxList().get(0).getId() == DefaultMetaManager.getInstance().getIginxId()) {

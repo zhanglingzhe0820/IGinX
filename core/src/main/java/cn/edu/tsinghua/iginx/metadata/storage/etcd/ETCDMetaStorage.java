@@ -1159,6 +1159,16 @@ public class ETCDMetaStorage implements IMetaStorage {
     }
 
     @Override
+    public void registerEnableTimeseriesMonitorChangeHook(EnableTimeseriesMonitorChangeHook hook) {
+
+    }
+
+    @Override
+    public void updateEnableTimeseriesMonitor(boolean isEnable) throws MetaStorageException {
+
+    }
+
+    @Override
     public List<TransformTaskMeta> loadTransformTask() throws MetaStorageException {
         try {
             lockTransform();
@@ -1265,6 +1275,11 @@ public class ETCDMetaStorage implements IMetaStorage {
     @Override
     public Map<FragmentMeta, List<FragmentMeta>> getCustomizableReplicaFragmentMetaList() throws MetaStorageException {
         return null;
+    }
+
+    @Override
+    public void registerCustomizableReplicaFragmentChangeHook(CustomizableReplicaFragmentChangeHook hook) {
+
     }
 
     public void close() throws MetaStorageException {

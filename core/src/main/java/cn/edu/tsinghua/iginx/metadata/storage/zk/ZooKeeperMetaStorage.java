@@ -27,6 +27,8 @@ import cn.edu.tsinghua.iginx.metadata.storage.IMetaStorage;
 import cn.edu.tsinghua.iginx.metadata.utils.JsonUtils;
 import cn.edu.tsinghua.iginx.metadata.utils.ReshardStatus;
 import cn.edu.tsinghua.iginx.utils.Pair;
+import com.google.gson.Gson;
+import com.google.gson.internal.LinkedTreeMap;
 import com.google.gson.reflect.TypeToken;
 
 import java.util.Map.Entry;
@@ -140,6 +142,8 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
 
     private static final String TRANSFORM_NODE_PREFIX = "/transform";
 
+    private static final String ENABLE_TIMESERIES_MONITOR_NODE_PREFIX = "/enable/monitor/timeseries";
+
     private static final String TRANSFORM_LOCK_NODE = "/lock/transform";
 
     private boolean isMaster = false;
@@ -172,6 +176,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     protected TreeCache reshardStatusCache;
     protected TreeCache reshardCounterCache;
     protected TreeCache maxActiveEndTimeStatisticsCache;
+    protected TreeCache customizableReplicaFragmentCache;
 
     private SchemaMappingChangeHook schemaMappingChangeHook = null;
     private IginxChangeHook iginxChangeHook = null;
@@ -182,9 +187,11 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     private TimeSeriesChangeHook timeSeriesChangeHook = null;
     private VersionChangeHook versionChangeHook = null;
     private TransformChangeHook transformChangeHook = null;
+    private EnableTimeseriesMonitorChangeHook enableTimeseriesMonitorChangeHook = null;
     private ReshardStatusChangeHook reshardStatusChangeHook = null;
     private ReshardCounterChangeHook reshardCounterChangeHook = null;
     private MaxActiveEndTimeStatisticsChangeHook maxActiveEndTimeStatisticsChangeHook = null;
+    private CustomizableReplicaFragmentChangeHook customizableReplicaFragmentChangeHook = null;
 
     protected TreeCache userCache;
 
@@ -195,6 +202,8 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     protected TreeCache versionCache;
 
     private TreeCache transformCache;
+
+    private TreeCache enableTimeseriesMonitorCache;
 
     public ZooKeeperMetaStorage() {
         client = CuratorFrameworkFactory.builder()
@@ -475,6 +484,8 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             registerMaxActiveEndTimeStatisticsListener();
             registerReshardStatusListener();
             registerReshardCounterListener();
+            registerEnableTimeseriesMonitorListener();
+            registerCustomizableReplicaFragmentListener();
             return storageEngineMetaMap;
         } catch (Exception e) {
             throw new MetaStorageException("get error when load schema mapping", e);
@@ -1261,6 +1272,27 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     }
 
     @Override
+    public void registerEnableTimeseriesMonitorChangeHook(EnableTimeseriesMonitorChangeHook hook) {
+        this.enableTimeseriesMonitorChangeHook = hook;
+    }
+
+    @Override
+    public void updateEnableTimeseriesMonitor(boolean isEnable) throws MetaStorageException {
+        try {
+            if (this.client.checkExists()
+                .forPath(ENABLE_TIMESERIES_MONITOR_NODE_PREFIX) == null) {
+                this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
+                    .forPath(ENABLE_TIMESERIES_MONITOR_NODE_PREFIX, JsonUtils.toJson(isEnable));
+            } else {
+                this.client.setData()
+                    .forPath(ENABLE_TIMESERIES_MONITOR_NODE_PREFIX, JsonUtils.toJson(isEnable));
+            }
+        } catch (Exception e) {
+            throw new MetaStorageException("encounter error when updating enable timeseries monitor: ", e);
+        }
+    }
+
+    @Override
     public List<TransformTaskMeta> loadTransformTask() throws MetaStorageException {
         InterProcessMutex mutex = new InterProcessMutex(this.client, TRANSFORM_LOCK_NODE);
         try {
@@ -1331,6 +1363,30 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         };
         this.transformCache.getListenable().addListener(listener);
         this.transformCache.start();
+    }
+
+    private void registerEnableTimeseriesMonitorListener() throws Exception {
+        this.enableTimeseriesMonitorCache = new TreeCache(this.client, ENABLE_TIMESERIES_MONITOR_NODE_PREFIX);
+        TreeCacheListener listener = (curatorFramework, event) -> {
+            if (enableTimeseriesMonitorChangeHook == null) {
+                return;
+            }
+            switch (event.getType()) {
+                case NODE_ADDED:
+                case NODE_UPDATED:
+                    if (event.getData() == null || event.getData().getPath() == null) {
+                        return; // 前缀事件，非含数据的节点的变化，不需要处理
+                    }
+                    boolean isEnableTimeseriesMonitor = JsonUtils.fromJson(event.getData().getData(), Boolean.class);
+                    enableTimeseriesMonitorChangeHook.onChange(isEnableTimeseriesMonitor);
+                    break;
+                case NODE_REMOVED:
+                default:
+                    break;
+            }
+        };
+        this.enableTimeseriesMonitorCache.getListenable().addListener(listener);
+        this.enableTimeseriesMonitorCache.start();
     }
 
     @Override
@@ -1504,7 +1560,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                                        Map<FragmentMeta, Long> readRequestsMap) throws Exception {
         // 写入不需要考虑可定制化副本
         for (Entry<FragmentMeta, Long> writeRequestsEntry : writeRequestsMap.entrySet()) {
-            if (writeRequestsEntry.getValue() > 0) {
+            if (writeRequestsEntry != null && writeRequestsEntry.getKey() != null && writeRequestsEntry.getValue() > 0) {
                 String requestsPath =
                     STATISTICS_FRAGMENT_REQUESTS_PREFIX_WRITE + "/" + writeRequestsEntry.getKey()
                         .getTsInterval()
@@ -1533,18 +1589,20 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             }
         }
         for (Entry<FragmentMeta, Long> readRequestsEntry : readRequestsMap.entrySet()) {
-            String path =
-                STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ + "/" + readRequestsEntry.getKey()
-                    .getTsInterval()
-                    .toString() + "/" + readRequestsEntry.getKey().getTimeInterval().toString() + "/" + readRequestsEntry.getKey().getMasterStorageUnit().getStorageEngineId();
-            if (this.client.checkExists().forPath(path) == null) {
-                this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
-                    .forPath(path, JsonUtils.toJson(readRequestsEntry.getValue()));
+            if (readRequestsEntry != null && readRequestsEntry.getKey() != null) {
+                String path =
+                    STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ + "/" + readRequestsEntry.getKey()
+                        .getTsInterval()
+                        .toString() + "/" + readRequestsEntry.getKey().getTimeInterval().toString() + "/" + readRequestsEntry.getKey().getMasterStorageUnit().getStorageEngineId();
+                if (this.client.checkExists().forPath(path) == null) {
+                    this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
+                        .forPath(path, JsonUtils.toJson(readRequestsEntry.getValue()));
+                }
+                byte[] data = this.client.getData().forPath(path);
+                long requests = JsonUtils.fromJson(data, Long.class);
+                this.client.setData()
+                    .forPath(path, JsonUtils.toJson(requests + readRequestsEntry.getValue()));
             }
-            byte[] data = this.client.getData().forPath(path);
-            long requests = JsonUtils.fromJson(data, Long.class);
-            this.client.setData()
-                .forPath(path, JsonUtils.toJson(requests + readRequestsEntry.getValue()));
         }
     }
 
@@ -2118,6 +2176,50 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         this.maxActiveEndTimeStatisticsCache.start();
     }
 
+    private void registerCustomizableReplicaFragmentListener() throws Exception {
+        this.customizableReplicaFragmentCache = new TreeCache(this.client, CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX);
+        TreeCacheListener listener = (curatorFramework, event) -> {
+            if (iginxChangeHook == null) {
+                return;
+            }
+            byte[] data;
+            List<LinkedTreeMap> replicaFragmentsLinkedTreeMap;
+            List<FragmentMeta> replicaFragments = new ArrayList<>();
+            switch (event.getType()) {
+                case NODE_ADDED:
+                case NODE_UPDATED:
+                    data = event.getData().getData();
+                    String childPath = event.getData().getPath().substring(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX.length());
+                    logger.error("childPath = {}", childPath);
+                    if (childPath.contains("replica")) {
+                        replicaFragmentsLinkedTreeMap = JsonUtils.fromJson(data, List.class);
+                        for (LinkedTreeMap linkedTreeMap : replicaFragmentsLinkedTreeMap) {
+                            Gson gson = new Gson();
+                            replicaFragments.add(gson.fromJson(gson.toJson(linkedTreeMap), FragmentMeta.class));
+                        }
+                        customizableReplicaFragmentChangeHook.onChange(replicaFragments.get(0), replicaFragments);
+                    }
+                    break;
+                case NODE_REMOVED:
+                    data = event.getData().getData();
+                    childPath = event.getData().getPath().substring(CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX.length());
+                    if (childPath.contains("replica")) {
+                        replicaFragmentsLinkedTreeMap = JsonUtils.fromJson(data, List.class);
+                        for (LinkedTreeMap linkedTreeMap : replicaFragmentsLinkedTreeMap) {
+                            Gson gson = new Gson();
+                            replicaFragments.add(gson.fromJson(gson.toJson(linkedTreeMap), FragmentMeta.class));
+                        }
+                        customizableReplicaFragmentChangeHook.onRemove(replicaFragments.get(0));
+                    }
+                    break;
+                default:
+                    break;
+            }
+        };
+        this.customizableReplicaFragmentCache.getListenable().addListener(listener);
+        this.customizableReplicaFragmentCache.start();
+    }
+
     @Override
     public void lockMaxActiveEndTimeStatistics() throws MetaStorageException {
         try {
@@ -2231,6 +2333,11 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         } catch (Exception e) {
             throw new MetaStorageException("get error when get customizable replica fragment", e);
         }
+    }
+
+    @Override
+    public void registerCustomizableReplicaFragmentChangeHook(CustomizableReplicaFragmentChangeHook hook) {
+        this.customizableReplicaFragmentChangeHook = hook;
     }
 
     private void registerReshardCounterListener() throws Exception {
