@@ -124,9 +124,9 @@ public class DefaultMetaManager implements IMetaManager {
             initReshardStatus();
             initReshardCounter();
             initEnableTimeseriesMonitor();
-            initCustomizableReplicaFragment();
-            initStorageEngine();
             initStorageUnit();
+            initStorageEngine();
+            initCustomizableReplicaFragment();
             initFragment();
             initSchemaMapping();
             initPolicy();
@@ -348,9 +348,18 @@ public class DefaultMetaManager implements IMetaManager {
     private void initCustomizableReplicaFragment() {
         storage.registerCustomizableReplicaFragmentChangeHook(new CustomizableReplicaFragmentChangeHook() {
             @Override
-            public void onChange(FragmentMeta sourceFragment, List<FragmentMeta> replicaFragments) {
+            public void onChange(FragmentMeta sourceFragment, List<FragmentMeta> replicaFragments) throws MetaStorageException {
                 logger.error("zk add CustomizableReplicaFragment source = {}", sourceFragment);
-                logger.error("zk add CustomizableReplicaFragment replica = {}", replicaFragments);
+                for (FragmentMeta fragmentMeta : replicaFragments) {
+                    logger.error("zk add CustomizableReplicaFragment replica = {}", fragmentMeta);
+                    StorageUnitMeta storageUnitMeta = cache.getStorageUnit(fragmentMeta.getMasterStorageUnitId());
+                    if (storageUnitMeta == null) {
+                        Map<String, StorageUnitMeta> storageUnits = storage.loadStorageUnit();
+                        cache.initStorageUnit(storageUnits);
+                        storageUnitMeta = cache.getStorageUnit(fragmentMeta.getMasterStorageUnitId());
+                    }
+                    fragmentMeta.setMasterStorageUnit(storageUnitMeta);
+                }
                 cache.addCustomizableReplicaFragmentMeta(sourceFragment, replicaFragments);
             }
 
@@ -848,7 +857,6 @@ public class DefaultMetaManager implements IMetaManager {
                 // 再初始化缓存
                 cache.initStorageUnit(globalStorageUnits);
                 cache.initFragment(globalFragmentMap);
-                initCustomizableReplicaFragments();
                 return false;
             }
 
@@ -897,6 +905,7 @@ public class DefaultMetaManager implements IMetaManager {
             // 再初始化缓存
             cache.initStorageUnit(loadedStorageUnits);
             cache.initFragment(storage.loadFragment());
+            initCustomizableReplicaFragments();
             return true;
         } catch (MetaStorageException e) {
             logger.error("encounter error when init fragment: ", e);
