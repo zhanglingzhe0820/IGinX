@@ -173,7 +173,7 @@ public class IoTDBStorage implements IStorage {
                 FragmentMeta fragment = task.getTargetFragment();
                 filter = new AndFilter(Arrays.asList(new TimeFilter(Op.GE, fragment.getTimeInterval().getStartTime()), new TimeFilter(Op.L, fragment.getTimeInterval().getEndTime())));
             }
-            return isDummyStorageUnit ? executeQueryHistoryTask(project, filter) : executeQueryTask(storageUnit, project, filter);
+            return isDummyStorageUnit ? executeQueryHistoryTask(project, filter) : executeQueryTask(storageUnit, project, filter, task.isHit());
         } else if (op.getType() == OperatorType.Insert) {
             Insert insert = (Insert) op;
             return executeInsertTask(storageUnit, insert);
@@ -280,7 +280,7 @@ public class IoTDBStorage implements IStorage {
         return timeseries;
     }
 
-    private TaskExecuteResult executeQueryTask(String storageUnit, Project project, Filter filter) { // 未来可能要用 tsInterval 对查询出来的数据进行过滤
+    private TaskExecuteResult executeQueryTask(String storageUnit, Project project, Filter filter, boolean isHit) { // 未来可能要用 tsInterval 对查询出来的数据进行过滤
         try {
             StringBuilder builder = new StringBuilder();
             for (String path : project.getPatterns()) {
@@ -289,7 +289,9 @@ public class IoTDBStorage implements IStorage {
             }
             String statement = String.format(QUERY_DATA, builder.deleteCharAt(builder.length() - 1).toString(), storageUnit, FilterTransformer.toString(filter));
             logger.info("[Query] execute query: " + statement);
+            long taskId = System.nanoTime();
             RowStream rowStream = new ClearEmptyRowStreamWrapper(new IoTDBQueryRowStream(sessionPool.executeQueryStatement(statement), true, project));
+            logger.error("isHit = {}, consumption time = {}", isHit, (System.nanoTime() - taskId));
             return new TaskExecuteResult(rowStream);
         } catch (IoTDBConnectionException | StatementExecutionException e) {
             logger.error(e.getMessage());

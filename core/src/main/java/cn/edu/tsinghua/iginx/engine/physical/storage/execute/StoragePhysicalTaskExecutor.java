@@ -146,6 +146,7 @@ public class StoragePhysicalTaskExecutor {
                                         }
                                     }
                                 }
+                                task.setHit(isHit);
                                 result = pair.k.execute(task);
 //                                if (isHit) {
 //                                    logger.error("query hit fragment = {}, result num = {}", task.getTargetFragment(), result.getRowStream().getHeader().getFields());
