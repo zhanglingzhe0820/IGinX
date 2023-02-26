@@ -1590,10 +1590,15 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         }
         for (Entry<FragmentMeta, Long> readRequestsEntry : readRequestsMap.entrySet()) {
             if (readRequestsEntry != null && readRequestsEntry.getKey() != null) {
-                String path =
-                    STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ + "/" + readRequestsEntry.getKey()
-                        .getTsInterval()
-                        .toString() + "/" + readRequestsEntry.getKey().getTimeInterval().toString() + "/" + readRequestsEntry.getKey().getMasterStorageUnit().getStorageEngineId();
+                String path = "";
+                try {
+                    path =
+                        STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ + "/" + readRequestsEntry.getKey()
+                            .getTsInterval()
+                            .toString() + "/" + readRequestsEntry.getKey().getTimeInterval().toString() + "/" + readRequestsEntry.getKey().getMasterStorageUnitId();
+                } catch (Exception e) {
+                    logger.error("readRequestsEntry = {}", readRequestsEntry.getKey());
+                }
                 if (this.client.checkExists().forPath(path) == null) {
                     this.client.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
                         .forPath(path, JsonUtils.toJson(readRequestsEntry.getValue()));
