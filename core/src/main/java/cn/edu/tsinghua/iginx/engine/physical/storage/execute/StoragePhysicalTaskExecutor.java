@@ -148,23 +148,23 @@ public class StoragePhysicalTaskExecutor {
                                 }
                                 task.setHit(isHit);
                                 result = pair.k.execute(task);
-                                if (isHit) {
-                                    int fieldsNum = result.getRowStream().getHeader().getFields().size();
-                                    int rowNum = 0;
-                                    while (result.getRowStream().hasNext()) {
-                                        result.getRowStream().next();
-                                        rowNum++;
-                                    }
-                                    logger.error("query hit fragment = {}, result num = {}, consumption time = {}", task.getTargetFragment(), rowNum * fieldsNum, (System.nanoTime() - taskId) / 1000000);
-                                } else {
-                                    int fieldsNum = result.getRowStream().getHeader().getFields().size();
-                                    int rowNum = 0;
-                                    while (result.getRowStream().hasNext()) {
-                                        result.getRowStream().next();
-                                        rowNum++;
-                                    }
-                                    logger.error("query not hit fragment = {}, result num = {}, consumption time = {}", task.getTargetFragment(), rowNum * fieldsNum, (System.nanoTime() - taskId) / 1000000);
-                                }
+//                                if (isHit) {
+//                                    int fieldsNum = result.getRowStream().getHeader().getFields().size();
+//                                    int rowNum = 0;
+//                                    while (result.getRowStream().hasNext()) {
+//                                        result.getRowStream().next();
+//                                        rowNum++;
+//                                    }
+//                                    logger.error("query hit fragment = {}, result num = {}, consumption time = {}", task.getTargetFragment(), rowNum * fieldsNum, (System.nanoTime() - taskId) / 1000000);
+//                                } else {
+//                                    int fieldsNum = result.getRowStream().getHeader().getFields().size();
+//                                    int rowNum = 0;
+//                                    while (result.getRowStream().hasNext()) {
+//                                        result.getRowStream().next();
+//                                        rowNum++;
+//                                    }
+//                                    logger.error("query not hit fragment = {}, result num = {}, consumption time = {}", task.getTargetFragment(), rowNum * fieldsNum, (System.nanoTime() - taskId) / 1000000);
+//                                }
                             } catch (Exception e) {
                                 logger.error("execute task error: ", e);
                                 result = new TaskExecuteResult(new PhysicalException(e));
