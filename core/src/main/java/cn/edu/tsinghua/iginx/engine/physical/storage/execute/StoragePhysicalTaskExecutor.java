@@ -149,7 +149,21 @@ public class StoragePhysicalTaskExecutor {
                                 task.setHit(isHit);
                                 result = pair.k.execute(task);
 //                                if (isHit) {
-//                                    logger.error("query hit fragment = {}, result num = {}", task.getTargetFragment(), result.getRowStream().getHeader().getFields());
+//                                    int fieldsNum = result.getRowStream().getHeader().getFields().size();
+//                                    int rowNum = 0;
+//                                    while (result.getRowStream().hasNext()){
+//                                        result.getRowStream().next();
+//                                        rowNum++;
+//                                    }
+//                                    logger.error("query hit fragment = {}, result num = {}, consumption time = {}", task.getTargetFragment(), rowNum * fieldsNum, System.nanoTime() - taskId);
+//                                } else {
+//                                    int fieldsNum = result.getRowStream().getHeader().getFields().size();
+//                                    int rowNum = 0;
+//                                    while (result.getRowStream().hasNext()){
+//                                        result.getRowStream().next();
+//                                        rowNum++;
+//                                    }
+//                                    logger.error("query not hit fragment = {}, result num = {}, consumption time = {}", task.getTargetFragment(), rowNum * fieldsNum, System.nanoTime() - taskId);
 //                                }
                             } catch (Exception e) {
                                 logger.error("execute task error: ", e);
