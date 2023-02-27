@@ -289,9 +289,9 @@ public class IoTDBStorage implements IStorage {
             }
             String statement = String.format(QUERY_DATA, builder.deleteCharAt(builder.length() - 1).toString(), storageUnit, FilterTransformer.toString(filter));
             logger.info("[Query] execute query: " + statement);
-            long taskId = System.nanoTime();
+//            long taskId = System.nanoTime();
             RowStream rowStream = new ClearEmptyRowStreamWrapper(new IoTDBQueryRowStream(sessionPool.executeQueryStatement(statement), true, project));
-            logger.error("isHit = {}, consumption time = {}", isHit, (System.nanoTime() - taskId));
+//            logger.error("isHit = {}, consumption time = {}", isHit, (System.nanoTime() - taskId));
             return new TaskExecuteResult(rowStream);
         } catch (IoTDBConnectionException | StatementExecutionException e) {
             logger.error(e.getMessage());
