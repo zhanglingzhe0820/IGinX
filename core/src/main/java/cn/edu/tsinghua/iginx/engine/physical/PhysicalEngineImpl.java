@@ -152,7 +152,9 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                     // 按行批量插入数据
                     if (timestampList.size() == ConfigDescriptor.getInstance().getConfig()
                         .getMigrationBatchSize()) {
+                        long startTime = System.currentTimeMillis();
                         insertDataByBatch(timestampList, valuesList, bitmapList, toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
+//                        logger.error("insertDataByBatch {} consumption time {}", timestampList.size(), System.currentTimeMillis() - startTime);
                         timestampList.clear();
                         valuesList.clear();
                         bitmapList.clear();
@@ -178,6 +180,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
         PhysicalTask task = optimizer.optimize(root);
         List<StoragePhysicalTask> storageTasks = new ArrayList<>();
         getStorageTasks(storageTasks, task);
+//        logger.error("task = {} commit task num = {}", task, storageTasks.size());
         storageTaskExecutor.commit(storageTasks);
         TaskExecuteResult result = task.getResult();
         if (result.getException() != null) {

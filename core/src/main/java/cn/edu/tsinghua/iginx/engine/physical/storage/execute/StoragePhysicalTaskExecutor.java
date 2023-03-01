@@ -169,6 +169,7 @@ public class StoragePhysicalTaskExecutor {
                                 logger.error("execute task error: ", e);
                                 result = new TaskExecuteResult(new PhysicalException(e));
                             }
+//                            logger.error("task consumption time = {}", (System.nanoTime() - taskId) / 1000000);
                             completedRequests.incrementAndGet();
                             try {
                                 if (!task.isMigration()) {

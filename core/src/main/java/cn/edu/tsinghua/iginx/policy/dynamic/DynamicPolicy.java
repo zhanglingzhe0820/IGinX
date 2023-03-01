@@ -173,6 +173,7 @@ public class DynamicPolicy implements IPolicy {
      * provided
      */
     private Pair<List<FragmentMeta>, List<StorageUnitMeta>> generateInitialFragmentsAndStorageUnitsDefault(List<String> paths, TimeInterval timeInterval) {
+        paths.sort(String::compareTo);
         List<FragmentMeta> fragmentList = new ArrayList<>();
         List<StorageUnitMeta> storageUnitList = new ArrayList<>();
 

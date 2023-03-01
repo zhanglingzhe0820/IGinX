@@ -46,22 +46,22 @@ public class MonitorManager implements Runnable {
             while (DefaultMetaManager.getInstance().isResharding()) {
                 Thread.sleep(1000);
             }
+
             //发起负载均衡判断
-            DefaultMetaManager.getInstance().executeReshardJudging();
             metaManager.updateFragmentRequests(RequestsMonitor.getInstance().getWriteRequestsMap(),
                 RequestsMonitor.getInstance()
                     .getReadRequestsMap());
+
             metaManager.submitMaxActiveEndTime();
-            List<Pair<FragmentMeta, Long>> writeCostList = HotSpotMonitor.getInstance().getWriteCostList();
+            List<Pair<FragmentMeta, Long>> writeCostList = new ArrayList<>(HotSpotMonitor.getInstance().getWriteCostList());
             writeCostList.sort(Comparator.comparing(Pair::getV));
-            List<Pair<FragmentMeta, Long>> readCostList = HotSpotMonitor.getInstance().getReadCostList();
+            List<Pair<FragmentMeta, Long>> readCostList = new ArrayList<>(HotSpotMonitor.getInstance().getReadCostList());
             readCostList.sort(Comparator.comparing(Pair::getV));
 
             metaManager.updateFragmentHeat(filterAndGetHeatMap(writeCostList), filterAndGetHeatMap(readCostList));
             //等待收集完成
-            while (!metaManager.isAllMonitorsCompleteCollection()) {
-                Thread.sleep(1000);
-            }
+            Thread.sleep(1000);
+
             //集中信息（初版主要是统计分区热度）
             Pair<Map<FragmentMeta, Long>, Map<FragmentMeta, Long>> fragmentHeatPair = metaManager
                 .loadFragmentHeat();
@@ -76,6 +76,7 @@ public class MonitorManager implements Runnable {
             Map<FragmentMeta, Long> fragmentMetaPointsMap = metaManager.loadFragmentPoints();
             Map<Long, List<FragmentMeta>> fragmentOfEachNode = loadFragmentOfEachNode(
                 fragmentHeatWriteMap, fragmentHeatReadMap);
+
             List<Long> toScaleInNodes = new ArrayList<>();
             for (StorageEngineMeta storageEngineMeta : storageEngineMetas) {
                 toScaleInNodes.add(storageEngineMeta.getId());
@@ -136,9 +137,10 @@ public class MonitorManager implements Runnable {
 
                 metaManager.updateFragmentHeat(filterAndGetHeatMap(writeCostList), filterAndGetHeatMap(readCostList));
                 //等待收集完成
-                while (!metaManager.isAllMonitorsCompleteCollection()) {
-                    Thread.sleep(1000);
-                }
+                Thread.sleep(1000);
+//                while (!metaManager.isAllMonitorsCompleteCollection()) {
+//                    Thread.sleep(1000);
+//                }
 
                 // 为了性能和方便，当前仅第一个节点可进行负载均衡及判断
                 if (DefaultMetaManager.getInstance().getIginxList().get(0).getId() == DefaultMetaManager.getInstance().getIginxId()) {
@@ -195,15 +197,19 @@ public class MonitorManager implements Runnable {
                     if (ConfigDescriptor.getInstance().getConfig().isEnableDynamicMigration()) {
                         if (((1 - unbalanceThreshold) * averageHeats >= minHeat
                             || (1 + unbalanceThreshold) * averageHeats <= maxHeat)) {
-                            logger.info("start to execute reshard");
-                            //发起负载均衡
-                            policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
-                                fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
+                            if (DefaultMetaManager.getInstance().executeReshard()) {
+                                logger.info("start to execute reshard");
+                                //发起负载均衡
+                                policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
+                                    fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
+                            }
                         }
                     }
                 }
             } catch (Exception e) {
                 logger.error("monitor manager error ", e);
+            } finally {
+                DefaultMetaManager.getInstance().doneReshard();
             }
         }
     }

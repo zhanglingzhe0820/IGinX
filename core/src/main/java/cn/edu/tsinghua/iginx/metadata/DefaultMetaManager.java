@@ -1286,6 +1286,9 @@ public class DefaultMetaManager implements IMetaManager {
             int fragmentRequestsCount = storage.getFragmentRequestsCounter();
             int fragmentHeatCount = storage.getFragmentHeatCounter();
             int count = getIginxList().size();
+            logger.error("fragmentRequestsCount = {}", fragmentRequestsCount);
+            logger.error("fragmentHeatCount = {}", fragmentHeatCount);
+            logger.error("count = {}", count);
             return fragmentRequestsCount >= count && fragmentHeatCount >= count;
         } catch (MetaStorageException e) {
             logger.error("encounter error when get monitor counter: ", e);
