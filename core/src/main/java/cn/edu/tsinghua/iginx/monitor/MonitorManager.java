@@ -197,19 +197,22 @@ public class MonitorManager implements Runnable {
                     if (ConfigDescriptor.getInstance().getConfig().isEnableDynamicMigration()) {
                         if (((1 - unbalanceThreshold) * averageHeats >= minHeat
                             || (1 + unbalanceThreshold) * averageHeats <= maxHeat)) {
-                            if (DefaultMetaManager.getInstance().executeReshard()) {
-                                logger.info("start to execute reshard");
-                                //发起负载均衡
-                                policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
-                                    fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
-                            }
+                            //发起负载均衡
+                            policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
+                                fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
+//                            if (DefaultMetaManager.getInstance().executeReshard()) {
+//                                logger.error("start to execute reshard");
+//                                //发起负载均衡
+//                                policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
+//                                    fragmentHeatWriteMap, fragmentHeatReadMap, new ArrayList<>());
+//                            }
                         }
                     }
                 }
             } catch (Exception e) {
                 logger.error("monitor manager error ", e);
             } finally {
-                DefaultMetaManager.getInstance().doneReshard();
+//                DefaultMetaManager.getInstance().doneReshard();
             }
         }
     }

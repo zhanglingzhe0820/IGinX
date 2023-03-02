@@ -76,6 +76,8 @@ public class Config {
 
     private long reshardFragmentTimeMargin = 60;
 
+    private boolean isEnableCustomizableReplica = false;
+
     private String migrationPolicyClassName = "cn.edu.tsinghua.iginx.migration.GreedyMigrationPolicy";
 
     private String statisticsCollectorClassName = "";
@@ -292,6 +294,14 @@ public class Config {
 
     public void setReshardFragmentTimeMargin(long reshardFragmentTimeMargin) {
         this.reshardFragmentTimeMargin = reshardFragmentTimeMargin;
+    }
+
+    public boolean isEnableCustomizableReplica() {
+        return isEnableCustomizableReplica;
+    }
+
+    public void setEnableCustomizableReplica(boolean enableCustomizableReplica) {
+        isEnableCustomizableReplica = enableCustomizableReplica;
     }
 
     public String getMigrationPolicyClassName() {

@@ -447,12 +447,18 @@ public class DynamicPolicy implements IPolicy {
                     }
                 }
 
-                double averageHeat = totalHeat * 1.0 / timeseriesHeat.size();
                 Map<String, Long> overLoadTimeseriesMap = new HashMap<>();
-                for (Entry<String, Long> timeseriesHeatEntry : timeseriesHeat.entrySet()) {
-                    if (timeseriesHeatEntry.getValue() > averageHeat * (1
-                        + maxTimeseriesLoadBalanceThreshold)) {
+                if (timeseriesHeat.size() == 1) {
+                    for (Entry<String, Long> timeseriesHeatEntry : timeseriesHeat.entrySet()) {
                         overLoadTimeseriesMap.put(timeseriesHeatEntry.getKey(), timeseriesHeatEntry.getValue());
+                    }
+                } else {
+                    double averageHeat = totalHeat * 1.0 / timeseriesHeat.size();
+                    for (Entry<String, Long> timeseriesHeatEntry : timeseriesHeat.entrySet()) {
+                        if (timeseriesHeatEntry.getValue() > averageHeat * (1
+                            + maxTimeseriesLoadBalanceThreshold)) {
+                            overLoadTimeseriesMap.put(timeseriesHeatEntry.getKey(), timeseriesHeatEntry.getValue());
+                        }
                     }
                 }
 

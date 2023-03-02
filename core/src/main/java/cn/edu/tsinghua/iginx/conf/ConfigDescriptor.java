@@ -82,6 +82,7 @@ public class ConfigDescriptor {
             config.setMaxReshardFragmentsNum(Integer.parseInt(properties.getProperty("maxReshardFragmentsNum", "3")));
             config.setMaxTimeseriesLoadBalanceThreshold(Double.parseDouble(properties.getProperty("maxTimeseriesLoadBalanceThreshold", "2")));
             config.setTimeseriesloadBalanceCheckInterval(Integer.parseInt(properties.getProperty("timeseriesloadBalanceCheckInterval", "30")));
+            config.setEnableCustomizableReplica(Boolean.parseBoolean(properties.getProperty("isEnableCustomizableReplica", "false")));
             config.setMigrationPolicyClassName(properties.getProperty("migrationPolicyClassName", "cn.edu.tsinghua.iginx.migration.SimulationBasedMigrationPolicy"));
             config.setEnableEnvParameter(Boolean.parseBoolean(properties.getProperty("enableEnvParameter", "false")));
 
