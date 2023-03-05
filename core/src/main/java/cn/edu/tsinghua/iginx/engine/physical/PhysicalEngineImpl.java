@@ -45,10 +45,12 @@ import cn.edu.tsinghua.iginx.engine.shared.operator.filter.TimeFilter;
 import cn.edu.tsinghua.iginx.engine.shared.source.FragmentSource;
 import cn.edu.tsinghua.iginx.engine.shared.source.OperatorSource;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
+import cn.edu.tsinghua.iginx.metadata.cache.DefaultMetaCache;
 import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
 import cn.edu.tsinghua.iginx.thrift.DataType;
+import cn.edu.tsinghua.iginx.transform.pojo.Task;
 import cn.edu.tsinghua.iginx.utils.Bitmap;
 import cn.edu.tsinghua.iginx.utils.ByteUtils;
 
@@ -60,10 +62,17 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class PhysicalEngineImpl implements PhysicalEngine {
 
     private static final Logger logger = LoggerFactory.getLogger(PhysicalEngineImpl.class);
+
+    private final ExecutorService migrationService = new ThreadPoolExecutor(10, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<>());
 
     private static final PhysicalEngineImpl INSTANCE = new PhysicalEngineImpl();
 
@@ -152,9 +161,14 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                     // 按行批量插入数据
                     if (timestampList.size() == ConfigDescriptor.getInstance().getConfig()
                         .getMigrationBatchSize()) {
-                        long startTime = System.currentTimeMillis();
+//                        migrationService.execute(() -> {
+//                            try {
+//                                insertDataByBatch(timestampList, valuesList, bitmapList, toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
+//                            } catch (PhysicalException e) {
+//                                logger.error("Migration data failure!", e);
+//                            }
+//                        });
                         insertDataByBatch(timestampList, valuesList, bitmapList, toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
-//                        logger.error("insertDataByBatch {} consumption time {}", timestampList.size(), System.currentTimeMillis() - startTime);
                         timestampList.clear();
                         valuesList.clear();
                         bitmapList.clear();
@@ -180,7 +194,29 @@ public class PhysicalEngineImpl implements PhysicalEngine {
         PhysicalTask task = optimizer.optimize(root);
         List<StoragePhysicalTask> storageTasks = new ArrayList<>();
         getStorageTasks(storageTasks, task);
-//        logger.error("task = {} commit task num = {}", task, storageTasks.size());
+        if (ConfigDescriptor.getInstance().getConfig().isEnableCustomizableReplica()) {
+            for (StoragePhysicalTask storagePhysicalTask : storageTasks) {
+                // 如果是查询请求，可能有可配置化副本，随机发送到任何一个副本上
+                boolean isHit = false;
+                if (!storagePhysicalTask.getOperators().isEmpty() && storagePhysicalTask.getOperators().get(0).getType() == OperatorType.Project) {
+                    FragmentMeta fragment = storagePhysicalTask.getTargetFragment();
+                    if (fragment != null) {
+                        List<FragmentMeta> fragmentMetas = DefaultMetaCache.getInstance().getCustomizableReplicaFragmentList(fragment);
+                        if (!fragmentMetas.isEmpty()) {
+                            int randomIndex = new Random().nextInt(fragmentMetas.size());
+                            isHit = true;
+                            FragmentMeta fragmentMeta = fragmentMetas.get(randomIndex);
+                            storagePhysicalTask.setTargetFragment(fragmentMetas.get(randomIndex));
+                            storagePhysicalTask.setStorageUnit(fragmentMeta.getMasterStorageUnitId());
+                            storagePhysicalTask.setStorage(fragmentMeta.getMasterStorageUnit().getStorageEngineId());
+                        } else {
+//                        logger.error("query is not hit fragment = {}", fragment);
+                        }
+                    }
+                }
+                storagePhysicalTask.setHit(isHit);
+            }
+        }
         storageTaskExecutor.commit(storageTasks);
         TaskExecuteResult result = task.getResult();
         if (result.getException() != null) {

@@ -34,10 +34,6 @@ import cn.edu.tsinghua.iginx.engine.physical.task.MemoryPhysicalTask;
 import cn.edu.tsinghua.iginx.engine.physical.task.StoragePhysicalTask;
 import cn.edu.tsinghua.iginx.engine.physical.task.TaskExecuteResult;
 import cn.edu.tsinghua.iginx.engine.shared.operator.*;
-import cn.edu.tsinghua.iginx.engine.shared.operator.filter.AndFilter;
-import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Filter;
-import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Op;
-import cn.edu.tsinghua.iginx.engine.shared.operator.filter.TimeFilter;
 import cn.edu.tsinghua.iginx.engine.shared.operator.tag.TagFilter;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import cn.edu.tsinghua.iginx.metadata.IMetaManager;
@@ -47,9 +43,7 @@ import cn.edu.tsinghua.iginx.metadata.entity.StorageEngineMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
 import cn.edu.tsinghua.iginx.metadata.hook.StorageEngineChangeHook;
 import cn.edu.tsinghua.iginx.metadata.hook.StorageUnitHook;
-import cn.edu.tsinghua.iginx.monitor.HotSpotMonitor;
-import cn.edu.tsinghua.iginx.monitor.RequestsMonitor;
-import cn.edu.tsinghua.iginx.monitor.TimeseriesMonitor;
+import cn.edu.tsinghua.iginx.monitor.*;
 import cn.edu.tsinghua.iginx.utils.Pair;
 import cn.edu.tsinghua.iginx.utils.StringUtils;
 import org.slf4j.Logger;
@@ -131,45 +125,11 @@ public class StoragePhysicalTaskExecutor {
                             long taskId = System.nanoTime();
                             submittedRequests.incrementAndGet();
                             try {
-                                // 如果是查询请求，可能有可配置化副本，随机发送到任何一个副本上
-                                boolean isHit = false;
-                                if (!task.getOperators().isEmpty() && task.getOperators().get(0).getType() == OperatorType.Project) {
-                                    FragmentMeta fragment = task.getTargetFragment();
-                                    if (fragment != null) {
-                                        List<FragmentMeta> fragmentMetas = DefaultMetaCache.getInstance().getCustomizableReplicaFragmentList(fragment);
-                                        if (!fragmentMetas.isEmpty()) {
-                                            int randomIndex = new Random().nextInt(fragmentMetas.size());
-                                            isHit = true;
-                                            task.setTargetFragment(fragmentMetas.get(randomIndex));
-                                        } else {
-//                                            logger.error("query is not hit fragment = {}", fragment);
-                                        }
-                                    }
-                                }
-                                task.setHit(isHit);
                                 result = pair.k.execute(task);
-//                                if (isHit) {
-//                                    int fieldsNum = result.getRowStream().getHeader().getFields().size();
-//                                    int rowNum = 0;
-//                                    while (result.getRowStream().hasNext()) {
-//                                        result.getRowStream().next();
-//                                        rowNum++;
-//                                    }
-//                                    logger.error("query hit fragment = {}, result num = {}, consumption time = {}", task.getTargetFragment(), rowNum * fieldsNum, (System.nanoTime() - taskId) / 1000000);
-//                                } else {
-//                                    int fieldsNum = result.getRowStream().getHeader().getFields().size();
-//                                    int rowNum = 0;
-//                                    while (result.getRowStream().hasNext()) {
-//                                        result.getRowStream().next();
-//                                        rowNum++;
-//                                    }
-//                                    logger.error("query not hit fragment = {}, result num = {}, consumption time = {}", task.getTargetFragment(), rowNum * fieldsNum, (System.nanoTime() - taskId) / 1000000);
-//                                }
                             } catch (Exception e) {
                                 logger.error("execute task error: ", e);
                                 result = new TaskExecuteResult(new PhysicalException(e));
                             }
-//                            logger.error("task consumption time = {}", (System.nanoTime() - taskId) / 1000000);
                             completedRequests.incrementAndGet();
                             try {
                                 if (!task.isMigration()) {
@@ -180,7 +140,17 @@ public class StoragePhysicalTaskExecutor {
                                         task.getOperators().get(0).getType());
                                     RequestsMonitor.getInstance()
                                         .record(task.getTargetFragment(), task.getOperators().get(0));
+
+                                    AnalyzeHotSpotMonitor.getInstance().recordWithoutMigration(taskId, task.getTargetFragment(),
+                                        task.getOperators().get(0).getType());
+                                    AnalyzeRequestsMonitor.getInstance()
+                                        .recordWithoutMigration(task.getTargetFragment(), task.getOperators().get(0));
                                 }
+                                AnalyzeHotSpotMonitor.getInstance()
+                                    .recordWithMigration(taskId, task.getTargetFragment(),
+                                        task.getOperators().get(0).getType());
+                                AnalyzeRequestsMonitor.getInstance()
+                                    .recordWithMigration(task.getTargetFragment(), task.getOperators().get(0));
                             } catch (Exception e) {
                                 logger.error("Monitor catch error:", e);
                             }

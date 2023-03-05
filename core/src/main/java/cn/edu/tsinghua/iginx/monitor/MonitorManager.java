@@ -158,6 +158,7 @@ public class MonitorManager implements Runnable {
 //                logger.error("fragmentHeatReadMap = {}", fragmentHeatReadMap);
 //        logger.error("start to load fragments points");
                     Map<FragmentMeta, Long> fragmentMetaPointsMap = metaManager.loadFragmentPoints();
+                    logger.error("fragmentMetaPointsMap = {}", fragmentMetaPointsMap);
 //        logger.error("start to load fragment of each node");
                     Map<Long, List<FragmentMeta>> fragmentOfEachNode = loadFragmentOfEachNode(
                         fragmentHeatWriteMap, fragmentHeatReadMap);

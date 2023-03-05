@@ -429,6 +429,7 @@ public class DynamicPolicy implements IPolicy {
                 MigrationManager.getInstance().getMigration()
                     .reshardWriteByTimeseries(fragmentMeta, points);
             } else {
+                logger.error("start to execute timeseries reshard");
                 TimeseriesMonitor.getInstance().start();
                 Thread.sleep(timeseriesloadBalanceCheckInterval * 1000L);
                 TimeseriesMonitor.getInstance().stop();
@@ -446,6 +447,7 @@ public class DynamicPolicy implements IPolicy {
                         timeseriesHeat.put(timeseriesHeatEntry.getKey(), timeseriesHeatEntry.getValue());
                     }
                 }
+                logger.error("timeseriesHeat = {}", timeseriesHeat);
 
                 Map<String, Long> overLoadTimeseriesMap = new HashMap<>();
                 if (timeseriesHeat.size() == 1) {
@@ -462,7 +464,8 @@ public class DynamicPolicy implements IPolicy {
                     }
                 }
 
-                if (overLoadTimeseriesMap.size() > 0) {
+                // 序列为空代表出现了左闭右开的无效访问情况
+                if (timeseriesHeat.isEmpty() || overLoadTimeseriesMap.size() > 0) {
                     MigrationManager.getInstance().getMigration()
                         .reshardByCustomizableReplica(fragmentMeta, timeseriesHeat,
                             overLoadTimeseriesMap.keySet(), totalHeat, points, storageHeat);

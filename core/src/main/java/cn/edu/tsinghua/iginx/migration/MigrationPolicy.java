@@ -13,10 +13,7 @@ import cn.edu.tsinghua.iginx.engine.shared.source.GlobalSource;
 import cn.edu.tsinghua.iginx.exceptions.MetaStorageException;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import cn.edu.tsinghua.iginx.metadata.cache.DefaultMetaCache;
-import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.*;
 import cn.edu.tsinghua.iginx.migration.recover.MigrationExecuteTask;
 import cn.edu.tsinghua.iginx.migration.recover.MigrationExecuteType;
 import cn.edu.tsinghua.iginx.migration.recover.MigrationLogger;
@@ -114,8 +111,7 @@ public abstract class MigrationPolicy {
                 List<Long> fakedFragmentMetaLoads = new ArrayList<>();
                 // 按超负载序列进行分片
                 // 单序列情况需要单独考虑
-                if (timeseries.size() == 1) {
-                    String targetTimeseries = timeseries.get(0);
+                if (timeseries.size() == 1 || timeseries.isEmpty()) {
                     Set<String> pathRegexSet = new HashSet<>();
                     ShowTimeSeries showTimeSeries = new ShowTimeSeries(new GlobalSource(),
                         pathRegexSet, null, Integer.MAX_VALUE, 0);
@@ -132,42 +128,57 @@ public abstract class MigrationPolicy {
                         }
                     }
                     pathList.sort(String::compareTo);
-                    for (int i = 0; i < pathList.size(); i++) {
-                        if (pathList.get(i).equals(targetTimeseries)) {
-                            if (i > 0 && i < pathList.size() - 1) {
-                                // 前置分片
-                                fakedFragmentMetas.add(new FragmentMeta(currStartTimeseries, pathList.get(i - 1), startTime,
-                                    endTime, storageUnitMeta));
-                                fakedFragmentMetaLoads.add(0L);
-                                // 高负载序列分片
-                                fakedFragmentMetas.add(new FragmentMeta(targetTimeseries, pathList.get(i + 1), startTime,
-                                    endTime, storageUnitMeta));
-                                fakedFragmentMetaLoads.add(timeseriesLoadMap.get(targetTimeseries));
-                                // 后置分片
-                                fakedFragmentMetas.add(new FragmentMeta(pathList.get(i + 1), endTimeseries, startTime,
-                                    endTime, storageUnitMeta));
-                                fakedFragmentMetaLoads.add(0L);
-                            } else if (i == 0) {
-                                // 高负载序列分片
-                                fakedFragmentMetas.add(new FragmentMeta(targetTimeseries, pathList.get(1), startTime,
-                                    endTime, storageUnitMeta));
-                                fakedFragmentMetaLoads.add(timeseriesLoadMap.get(targetTimeseries));
-                                // 后置分片
-                                fakedFragmentMetas.add(new FragmentMeta(pathList.get(1), endTimeseries, startTime,
-                                    endTime, storageUnitMeta));
-                                fakedFragmentMetaLoads.add(0L);
-                            } else if (i == pathList.size() - 1) {
-                                // 前置分片
-                                fakedFragmentMetas.add(new FragmentMeta(currStartTimeseries, targetTimeseries, startTime,
-                                    endTime, storageUnitMeta));
-                                fakedFragmentMetaLoads.add(0L);
-                                // 高负载序列分片
-                                fakedFragmentMetas.add(new FragmentMeta(targetTimeseries, endTimeseries, startTime,
-                                    endTime, storageUnitMeta));
-                                fakedFragmentMetaLoads.add(timeseriesLoadMap.get(targetTimeseries));
+                    if (timeseries.size() == 1) {
+                        String targetTimeseries = timeseries.get(0);
+                        for (int i = 0; i < pathList.size(); i++) {
+                            if (pathList.get(i).equals(targetTimeseries)) {
+                                if (i > 0 && i < pathList.size() - 1) {
+                                    // 前置分片
+                                    fakedFragmentMetas.add(new FragmentMeta(currStartTimeseries, pathList.get(i - 1), startTime,
+                                        endTime, storageUnitMeta));
+                                    fakedFragmentMetaLoads.add(0L);
+                                    // 高负载序列分片
+                                    fakedFragmentMetas.add(new FragmentMeta(targetTimeseries, pathList.get(i + 1), startTime,
+                                        endTime, storageUnitMeta));
+                                    fakedFragmentMetaLoads.add(timeseriesLoadMap.get(targetTimeseries));
+                                    // 后置分片
+                                    fakedFragmentMetas.add(new FragmentMeta(pathList.get(i + 1), endTimeseries, startTime,
+                                        endTime, storageUnitMeta));
+                                    fakedFragmentMetaLoads.add(0L);
+                                } else if (i == 0) {
+                                    // 高负载序列分片
+                                    fakedFragmentMetas.add(new FragmentMeta(targetTimeseries, pathList.get(1), startTime,
+                                        endTime, storageUnitMeta));
+                                    fakedFragmentMetaLoads.add(timeseriesLoadMap.get(targetTimeseries));
+                                    // 后置分片
+                                    fakedFragmentMetas.add(new FragmentMeta(pathList.get(1), endTimeseries, startTime,
+                                        endTime, storageUnitMeta));
+                                    fakedFragmentMetaLoads.add(0L);
+                                } else if (i == pathList.size() - 1) {
+                                    // 前置分片
+                                    fakedFragmentMetas.add(new FragmentMeta(currStartTimeseries, targetTimeseries, startTime,
+                                        endTime, storageUnitMeta));
+                                    fakedFragmentMetaLoads.add(0L);
+                                    // 高负载序列分片
+                                    fakedFragmentMetas.add(new FragmentMeta(targetTimeseries, endTimeseries, startTime,
+                                        endTime, storageUnitMeta));
+                                    fakedFragmentMetaLoads.add(timeseriesLoadMap.get(targetTimeseries));
+                                }
+                                break;
                             }
-                            break;
                         }
+                    } else {
+                        // 前置分片
+                        fakedFragmentMetas.add(new FragmentMeta(currStartTimeseries, pathList.get(pathList.size() - 1), startTime,
+                            endTime, storageUnitMeta));
+                        fakedFragmentMetaLoads.add(0L);
+                        // 高负载无效访问序列分片
+                        fakedFragmentMetas.add(new FragmentMeta(pathList.get(pathList.size() - 1), endTimeseries, startTime,
+                            endTime, storageUnitMeta));
+                        // 随便加一些负载
+                        totalLoad = 100000L;
+                        fakedFragmentMetaLoads.add(100000L);
+                        logger.error("one timeseries, fakedFragmentMetas = {}", fakedFragmentMetas);
                     }
                 } else {
                     for (int i = 0; i < timeseries.size(); i++) {
@@ -195,7 +206,6 @@ public abstract class MigrationPolicy {
                         endTime, storageUnitMeta));
                     fakedFragmentMetaLoads.add(currLoad);
                 }
-                logger.error("fakedFragmentMetas = {}", fakedFragmentMetas);
 
                 // 模拟进行时间序列分片
                 while (fakedFragmentMetas.size() > maxReshardFragmentsNum) {
@@ -262,6 +272,7 @@ public abstract class MigrationPolicy {
                 List<Entry<Long, Long>> storageHeatEntryList = new ArrayList<>(storageHeat.entrySet());
                 storageHeatEntryList.sort(Entry.comparingByValue());
                 logger.error("customizable replica reshard fragments = {}", fakedFragmentMetas);
+                logger.error("fakedFragmentMetaLoads = {}", fakedFragmentMetaLoads);
 
                 // 开始实际切分片
                 if (fakedFragmentMetas.size() == 1) {
@@ -277,7 +288,7 @@ public abstract class MigrationPolicy {
                         if (i == 0) {
                             DefaultMetaManager.getInstance().endFragmentByTimeSeriesInterval(fragmentMeta,
                                 targetFragmentMeta.getTsInterval().getEndTimeSeries());
-                            DefaultMetaManager.getInstance().updateFragmentPoints(fragmentMeta, points / fakedFragmentMetas.size());
+                            DefaultMetaManager.getInstance().updateFragmentPoints(targetFragmentMeta, points / fakedFragmentMetas.size());
                         } else {
                             FragmentMeta newFragment = new FragmentMeta(
                                 targetFragmentMeta.getTsInterval().getStartTimeSeries(),
@@ -297,6 +308,7 @@ public abstract class MigrationPolicy {
                         }
                     }
                     // 如果一个副本都没拷贝，则拷贝负载最高的一个
+                    logger.error("storageHeatEntryList = {}", storageHeatEntryList);
                     if (!isReplica) {
                         FragmentMeta targetFragmentMeta = null;
                         long maxHeat = 0;
@@ -306,6 +318,8 @@ public abstract class MigrationPolicy {
                                 targetFragmentMeta = fakedFragmentMetas.get(i);
                             }
                         }
+                        logger.error("maxtargetFragmentMeta = {}", targetFragmentMeta);
+                        logger.error("maxHeat = {}", maxHeat);
                         if (targetFragmentMeta != null) {
                             int replicas = storageHeatEntryList.size();
                             makeReplicaOfTargetFragment(replicas, targetFragmentMeta, storageHeatEntryList);
@@ -325,18 +339,49 @@ public abstract class MigrationPolicy {
         List<FragmentMeta> replicaFragmentMetas = new ArrayList<>();
         replicaFragmentMetas.add(targetFragmentMeta);
         List<StorageUnitMeta> targetReplicaStorageUnitMetaList = new ArrayList<>();
-        for (int num = 0; num < replicas; num++) {
-            long targetStorageId = storageHeatEntryList.get(num).getKey();
-            StorageUnitMeta newStorageUnitMeta = DefaultMetaManager.getInstance()
-                .generateNewStorageUnitMetaByFragment(targetFragmentMeta, targetStorageId);
-            targetReplicaStorageUnitMetaList.add(newStorageUnitMeta);
-            FragmentMeta newFragment = new FragmentMeta(
-                targetFragmentMeta.getTsInterval().getStartTimeSeries(),
-                targetFragmentMeta.getTsInterval().getEndTimeSeries(),
-                targetFragmentMeta.getTimeInterval().getStartTime(),
-                targetFragmentMeta.getTimeInterval().getEndTime(), newStorageUnitMeta);
-            replicaFragmentMetas.add(newFragment);
+
+        // 热度信息位空，说明是单序列情况，直接全部拷贝
+        if (storageHeatEntryList.isEmpty()) {
+            List<StorageEngineMeta> storageEngineMetas = DefaultMetaManager.getInstance().getStorageEngineList();
+            for (StorageEngineMeta storageEngineMeta : storageEngineMetas) {
+                // 本机id后面统一拷贝
+                if (storageEngineMeta.getId() != targetFragmentMeta.getMasterStorageUnit().getStorageEngineId()) {
+                    StorageUnitMeta newStorageUnitMeta = DefaultMetaManager.getInstance()
+                        .generateNewStorageUnitMetaByFragment(targetFragmentMeta, storageEngineMeta.getId());
+                    targetReplicaStorageUnitMetaList.add(newStorageUnitMeta);
+                    FragmentMeta newFragment = new FragmentMeta(
+                        targetFragmentMeta.getTsInterval().getStartTimeSeries(),
+                        targetFragmentMeta.getTsInterval().getEndTimeSeries(),
+                        targetFragmentMeta.getTimeInterval().getStartTime(),
+                        targetFragmentMeta.getTimeInterval().getEndTime(), newStorageUnitMeta);
+                    replicaFragmentMetas.add(newFragment);
+                }
+            }
+        } else {
+            for (int num = 0; num < replicas; num++) {
+                long targetStorageId = storageHeatEntryList.get(num).getKey();
+                StorageUnitMeta newStorageUnitMeta = DefaultMetaManager.getInstance()
+                    .generateNewStorageUnitMetaByFragment(targetFragmentMeta, targetStorageId);
+                targetReplicaStorageUnitMetaList.add(newStorageUnitMeta);
+                FragmentMeta newFragment = new FragmentMeta(
+                    targetFragmentMeta.getTsInterval().getStartTimeSeries(),
+                    targetFragmentMeta.getTsInterval().getEndTimeSeries(),
+                    targetFragmentMeta.getTimeInterval().getStartTime(),
+                    targetFragmentMeta.getTimeInterval().getEndTime(), newStorageUnitMeta);
+                replicaFragmentMetas.add(newFragment);
+            }
         }
+        // 本地新建 du 并拷贝数据
+//        StorageUnitMeta newLocalStorageUnitMeta = DefaultMetaManager.getInstance()
+//            .generateNewStorageUnitMetaByFragment(targetFragmentMeta, targetFragmentMeta.getMasterStorageUnit().getStorageEngineId());
+//        targetReplicaStorageUnitMetaList.add(newLocalStorageUnitMeta);
+//        FragmentMeta newLocalFragment = new FragmentMeta(
+//            targetFragmentMeta.getTsInterval().getStartTimeSeries(),
+//            targetFragmentMeta.getTsInterval().getEndTimeSeries(),
+//            targetFragmentMeta.getTimeInterval().getStartTime(),
+//            targetFragmentMeta.getTimeInterval().getEndTime(), newLocalStorageUnitMeta);
+//        replicaFragmentMetas.add(newLocalFragment);
+
         logger.error("targetReplicaStorageUnitMetaList = {}", targetReplicaStorageUnitMetaList);
         // 开始拷贝数据
         Set<String> pathRegexSet = new HashSet<>();

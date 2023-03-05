@@ -19,7 +19,7 @@ public class TimeseriesMonitor implements IMonitor {
 
     private static final Logger logger = LoggerFactory.getLogger(TimeseriesMonitor.class);
     private final boolean isEnableMonitor = ConfigDescriptor.getInstance().getConfig()
-            .isEnableMonitor();
+        .isEnableMonitor();
     private final Map<String, Long> timeseriesLoadMap = new ConcurrentHashMap<>(); // 时间序列->总负载
     private static final TimeseriesMonitor instance = new TimeseriesMonitor();
 

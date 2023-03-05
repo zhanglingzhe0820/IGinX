@@ -20,6 +20,7 @@ package cn.edu.tsinghua.iginx;
 
 import cn.edu.tsinghua.iginx.conf.Config;
 import cn.edu.tsinghua.iginx.conf.ConfigDescriptor;
+import cn.edu.tsinghua.iginx.monitor.AnalyzeMonitorManager;
 import cn.edu.tsinghua.iginx.monitor.MonitorManager;
 import cn.edu.tsinghua.iginx.mqtt.MQTTService;
 import cn.edu.tsinghua.iginx.rest.RestServer;
@@ -48,6 +49,7 @@ public class Iginx {
         }
         if (config.isEnableMonitor()) {
             new Thread(MonitorManager.getInstance()).start();
+            new Thread(AnalyzeMonitorManager.getInstance()).start();
         }
         Iginx iginx = new Iginx();
         iginx.startServer();
