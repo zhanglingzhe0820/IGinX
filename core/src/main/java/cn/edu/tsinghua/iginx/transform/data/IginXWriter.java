@@ -9,7 +9,7 @@ import cn.edu.tsinghua.iginx.thrift.ExecuteStatementReq;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
+import java.time.Instant;
 
 public class IginXWriter extends ExportWriter {
 
@@ -43,7 +43,7 @@ public class IginXWriter extends ExportWriter {
         StringBuilder builder = new StringBuilder();
 
         // construct paths
-        builder.append("INSERT INTO transform(Time, ");
+        builder.append("INSERT INTO transform(key, ");
         Header header = batchData.getHeader();
         header.getFields().forEach(field ->
             builder.append(reformatPath(field.getFullName())).append(",")
@@ -52,7 +52,7 @@ public class IginXWriter extends ExportWriter {
 
         // construct values
         builder.append(") VALUES");
-        long index = System.currentTimeMillis();
+        long index = getCurrentTimeInNS();
         for (Row row : batchData.getRowList()) {
             builder.append(" (");
             builder.append(index).append(",");
@@ -65,6 +65,11 @@ public class IginXWriter extends ExportWriter {
         }
         builder.deleteCharAt(builder.length() - 1).append(";");
         return builder.toString();
+    }
+
+    private long getCurrentTimeInNS() {
+        Instant now = Instant.now();
+        return now.getEpochSecond() * 1_000_000_000L + now.getNano();
     }
 
     private String reformatPath(String path) {

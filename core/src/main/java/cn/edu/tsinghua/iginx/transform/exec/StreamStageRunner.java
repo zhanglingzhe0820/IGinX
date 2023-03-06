@@ -47,7 +47,7 @@ public class StreamStageRunner implements Runner {
     private final ContextBuilder contextBuilder = ContextBuilder.getInstance();
 
     private final static Config config = ConfigDescriptor.getInstance().getConfig();
-
+    @SuppressWarnings("unused")
     private final static Logger logger = LoggerFactory.getLogger(StreamStageRunner.class);
 
     public StreamStageRunner(StreamStage stage) {
@@ -60,6 +60,15 @@ public class StreamStageRunner implements Runner {
 
     @Override
     public void start() throws TransformException {
+        if (streamStage.isStartWithIginX()) {
+            IginXTask firstTask = (IginXTask) streamStage.getTaskList().get(0);
+            RowStream rowStream = getRowStream(streamStage.getSessionId(), firstTask.getSqlList());
+            reader = new RowStreamReader(rowStream, batchSize);
+        } else {
+            CollectionWriter collectionWriter = (CollectionWriter) streamStage.getBeforeStage().getExportWriter();
+            reader = new SplitReader(collectionWriter.getCollectedData(), batchSize);
+        }
+
         List<Task> taskList = streamStage.getTaskList();
         for (int i = taskList.size() - 1; i >= 0; i--) {
             Task task = taskList.get(i);
@@ -68,15 +77,6 @@ public class StreamStageRunner implements Runner {
                 pemjaWorkerList.add(0, pemjaWorker);
                 writer = new PemjaWriter(pemjaWorker);
             }
-        }
-
-        if (streamStage.isStartWithIginX()) {
-            IginXTask firstTask = (IginXTask) streamStage.getTaskList().get(0);
-            RowStream rowStream = getRowStream(streamStage.getSessionId(), firstTask.getSqlList());
-            reader = new RowStreamReader(rowStream, batchSize);
-        } else {
-            CollectionWriter collectionWriter = (CollectionWriter) streamStage.getBeforeStage().getExportWriter();
-            reader = new SplitReader(collectionWriter.getCollectedData(), batchSize);
         }
     }
 
@@ -107,6 +107,8 @@ public class StreamStageRunner implements Runner {
 
     @Override
     public void close() {
-        reader.close();
+        if (reader != null) {
+            reader.close();
+        }
     }
 }

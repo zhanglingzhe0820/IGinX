@@ -12,7 +12,7 @@
     </parent>
 
     <artifactId>iginx-thrift</artifactId>
-    <name>IginX Thrift</name>
+    <name>IGinX Thrift</name>
 
     <dependencies>
         <dependency>
@@ -100,6 +100,25 @@
 <!--                            <outputDirectory>${project.build.directory}/generated-sources/thrift</outputDirectory>-->
 <!--                        </configuration>-->
 <!--                    </execution>-->
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>add-source</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/thrift</source>
+                            </sources>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>

@@ -18,25 +18,23 @@
  */
 package cn.edu.tsinghua.iginx.rest.query;
 
-import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
-import cn.edu.tsinghua.iginx.metadata.IMetaManager;
 import cn.edu.tsinghua.iginx.rest.RestSession;
 import cn.edu.tsinghua.iginx.rest.bean.Query;
 import cn.edu.tsinghua.iginx.rest.bean.QueryMetric;
 import cn.edu.tsinghua.iginx.rest.bean.QueryResult;
 import cn.edu.tsinghua.iginx.rest.bean.QueryResultDataset;
-import cn.edu.tsinghua.iginx.rest.insert.DataPointsParser;
 import cn.edu.tsinghua.iginx.rest.query.aggregator.QueryAggregator;
 import cn.edu.tsinghua.iginx.rest.query.aggregator.QueryAggregatorNone;
 import cn.edu.tsinghua.iginx.rest.query.aggregator.QueryShowTimeSeries;
 
 import cn.edu.tsinghua.iginx.thrift.DataType;
+import cn.edu.tsinghua.iginx.thrift.TimePrecision;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
-import static cn.edu.tsinghua.iginx.rest.bean.SpecialTime.*;
+import static cn.edu.tsinghua.iginx.rest.RestUtils.*;
 
 public class QueryExecutor {
     public static final Logger LOGGER = LoggerFactory.getLogger(QueryExecutor.class);
@@ -140,7 +138,7 @@ public class QueryExecutor {
                     metrics.add(metric);
                     if(hasTitle) {
                         titleQuery.setQueryMetrics(metrics);
-                        titleQuery.setTimePrecision("ns");
+                        titleQuery.setTimePrecision(TimePrecision.NS);
                         this.query = titleQuery;
                         title = execute(false);
                         anno.getQueryResultDatasets().get(i).addTitle(getStringFromObject(title.getQueryResultDatasets().get(0).getValues().get(0)));
@@ -149,7 +147,7 @@ public class QueryExecutor {
                     }
                     if(hasDescription) {
                         descriptionQuery.setQueryMetrics(metrics);
-                        descriptionQuery.setTimePrecision("ns");
+                        descriptionQuery.setTimePrecision(TimePrecision.NS);
                         this.query = descriptionQuery;
                         description = execute(false);
                         anno.getQueryResultDatasets().get(i).addDescription(getStringFromObject(description.getQueryResultDatasets().get(0).getValues().get(0)));

@@ -22,6 +22,7 @@ import cn.edu.tsinghua.iginx.conf.ConfigDescriptor;
 import cn.edu.tsinghua.iginx.metadata.entity.StorageEngineMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
 import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesRange;
 import cn.edu.tsinghua.iginx.utils.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +56,11 @@ public class StorageManager {
         }
     }
 
-    public static Pair<TimeSeriesInterval, TimeInterval> getBoundaryOfStorage(StorageEngineMeta meta) {
+    public static Pair<TimeSeriesRange, TimeInterval> getBoundaryOfStorage(StorageEngineMeta meta) {
+        return getBoundaryOfStorage(meta, null);
+    }
+
+    public static Pair<TimeSeriesRange, TimeInterval> getBoundaryOfStorage(StorageEngineMeta meta, String dataPrefix) {
         initClassLoaderAndDrivers();
         String engine = meta.getStorageEngine();
         String driver = drivers.get(engine);
@@ -71,7 +76,7 @@ public class StorageManager {
                         .getConstructor(StorageEngineMeta.class).newInstance(meta);
                 needRelease = true;
             }
-            return storage.getBoundaryOfStorage();
+            return storage.getBoundaryOfStorage(dataPrefix);
         } catch (ClassNotFoundException e) {
             logger.error("load class {} for engine {} failure: {}", driver, engine, e);
         } catch (Exception e) {
@@ -86,18 +91,6 @@ public class StorageManager {
             }
         }
         return new Pair<>(new TimeSeriesInterval(null, null), new TimeInterval(0, Long.MAX_VALUE));
-    }
-
-    private static String getDriverClassName(String storageEngine) {
-        String[] parts = ConfigDescriptor.getInstance().getConfig().getDatabaseClassNames().split(",");
-        for (String part : parts) {
-            String[] kAndV = part.split("=");
-            if (!kAndV[0].equals(storageEngine)) {
-                continue;
-            }
-            return kAndV[1];
-        }
-        throw new RuntimeException("cannot find driver for " + storageEngine + ", please check config.properties ");
     }
 
     private boolean initStorage(StorageEngineMeta meta) {

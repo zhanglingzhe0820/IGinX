@@ -61,7 +61,7 @@ public class ConfigDescriptor {
             config.setZookeeperConnectionString(properties.getProperty("zookeeperConnectionString",
                 "127.0.0.1:2181"));
             config.setStorageEngineList(properties.getProperty("storageEngineList",
-                "127.0.0.1#6667#iotdb11#username=root#password=root#sessionPoolSize=20#dataDir=/path/to/your/data/"));
+                "127.0.0.1#6667#iotdb12#username=root#password=root#sessionPoolSize=20#dataDir=/path/to/your/data/"));
             config.setMaxAsyncRetryTimes(Integer.parseInt(properties.getProperty("maxAsyncRetryTimes", "3")));
             config.setSyncExecuteThreadPool(Integer.parseInt(properties.getProperty("syncExecuteThreadPool", "60")));
             config.setAsyncExecuteThreadPool(Integer.parseInt(properties.getProperty("asyncExecuteThreadPool", "20")));
@@ -84,6 +84,11 @@ public class ConfigDescriptor {
             config.setTimeseriesloadBalanceCheckInterval(Integer.parseInt(properties.getProperty("timeseriesloadBalanceCheckInterval", "30")));
             config.setEnableCustomizableReplica(Boolean.parseBoolean(properties.getProperty("isEnableCustomizableReplica", "false")));
             config.setMigrationPolicyClassName(properties.getProperty("migrationPolicyClassName", "cn.edu.tsinghua.iginx.migration.SimulationBasedMigrationPolicy"));
+            config.setEnableFragmentCompaction(Boolean.parseBoolean(properties.getProperty("enableFragmentCompaction", "false")));
+            config.setFragmentCompactionWriteThreshold(Long.parseLong(properties.getProperty("fragmentCompactionWriteThreshold", "1000")));
+            config.setFragmentCompactionReadThreshold(Long.parseLong(properties.getProperty("fragmentCompactionReadThreshold", "1000")));
+            config.setFragmentCompactionReadRatioThreshold(Double.parseDouble(properties.getProperty("fragmentCompactionReadRatioThreshold", "0.1")));
+
             config.setEnableEnvParameter(Boolean.parseBoolean(properties.getProperty("enableEnvParameter", "false")));
 
             config.setStatisticsCollectorClassName(properties.getProperty("statisticsCollectorClassName", ""));
@@ -99,7 +104,6 @@ public class ConfigDescriptor {
             config.setEnableRestService(Boolean.parseBoolean(properties.getProperty("enableRestService", "true")));
 
             config.setMetaStorage(properties.getProperty("metaStorage", "zookeeper"));
-            config.setFileDataDir(properties.getProperty("fileDataDir", ""));
             config.setEtcdEndpoints(properties.getProperty("etcdEndpoints", "http://localhost:2379"));
 
             config.setEnableMQTT(Boolean.parseBoolean(properties.getProperty("enable_mqtt", "false")));
@@ -149,6 +153,9 @@ public class ConfigDescriptor {
 
             config.setHistoricalPrefixList(properties.getProperty("historicalPrefixList", ""));
             config.setExpectedStorageUnitNum(Integer.parseInt(properties.getProperty("expectedStorageUnitNum", "0")));
+            config.setLocalParquetStorage(Boolean.parseBoolean(properties.getProperty("isLocalParquetStorage", "true")));
+            config.setMinThriftWorkerThreadNum(Integer.parseInt(properties.getProperty("minThriftWorkerThreadNum", "20")));
+            config.setMaxThriftWrokerThreadNum(Integer.parseInt(properties.getProperty("maxThriftWorkerThreadNum", "2147483647")));
         } catch (IOException e) {
             logger.error("Fail to load properties: ", e);
         }
@@ -176,7 +183,6 @@ public class ConfigDescriptor {
         config.setAsyncRestThreadPool(EnvUtils.loadEnv("asyncRestThreadPool", config.getAsyncRestThreadPool()));
         config.setEnableRestService(EnvUtils.loadEnv("enableRestService", config.isEnableRestService()));
         config.setMetaStorage(EnvUtils.loadEnv("metaStorage", config.getMetaStorage()));
-        config.setFileDataDir(EnvUtils.loadEnv("fileDataDir", config.getFileDataDir()));
         config.setEtcdEndpoints(EnvUtils.loadEnv("etcdEndpoints", config.getEtcdEndpoints()));
         config.setEnableMQTT(EnvUtils.loadEnv("enable_mqtt", config.isEnableMQTT()));
         config.setMqttHost(EnvUtils.loadEnv("mqtt_host", config.getMqttHost()));
@@ -213,6 +219,7 @@ public class ConfigDescriptor {
         config.setNeedInitBasicUDFFunctions(EnvUtils.loadEnv("needInitBasicUDFFunctions", config.isNeedInitBasicUDFFunctions()));
         config.setHistoricalPrefixList(EnvUtils.loadEnv("historicalPrefixList", config.getHistoricalPrefixList()));
         config.setExpectedStorageUnitNum(EnvUtils.loadEnv("expectedStorageUnitNum", config.getExpectedStorageUnitNum()));
+        config.setLocalParquetStorage(EnvUtils.loadEnv("isLocalParquetStorage", config.isLocalParquetStorage()));
     }
 
     private void loadUDFListFromFile() {

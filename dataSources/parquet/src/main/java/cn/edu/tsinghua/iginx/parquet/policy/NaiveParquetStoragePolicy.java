@@ -5,7 +5,7 @@ import static cn.edu.tsinghua.iginx.parquet.tools.Constant.COLUMN_TIME;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import cn.edu.tsinghua.iginx.metadata.IMetaManager;
 import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesRange;
 import cn.edu.tsinghua.iginx.utils.Pair;
 import java.io.File;
 import java.io.IOException;
@@ -82,13 +82,13 @@ public class NaiveParquetStoragePolicy implements ParquetStoragePolicy {
         long startTime = Long.parseLong(maxTimeDir.getName());
         File[] pathPartition = maxTimeDir.listFiles();
         if (pathPartition == null || pathPartition.length == 0) {
-            Pair<TimeSeriesInterval, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
+            Pair<TimeSeriesRange, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
             return new Pair<>(startTime, Collections.singletonList(duBoundary.getK().getStartTimeSeries()));
         } else {
             List<String> startPaths = new ArrayList<>();
             for (File pathPartitionFile : pathPartition) {
-                String startPath = pathPartitionFile.getName().split("_")[2];
-                startPath = startPath.substring(0, startPath.indexOf(".parquet"));
+                String startPath = pathPartitionFile.getName().split("__")[2];
+                startPath = startPath.substring(0, startPath.lastIndexOf(".parquet"));
                 startPaths.add(startPath);
             }
             return new Pair<>(startTime, startPaths);
@@ -98,7 +98,7 @@ public class NaiveParquetStoragePolicy implements ParquetStoragePolicy {
     private boolean needCreateNewDataPartition(File file) {
         long fileSize = FileUtils.sizeOf(file);
         boolean needCreateNewDataPartition = fileSize > FILE_SIZE_LIMIT_10MB;
-        logger.info("current data file '{}' size: {} mb", file.getAbsolutePath(), fileSize / 1024 / 1024);
+//        logger.info("current data file '{}' size: {} mb", file.getAbsolutePath(), fileSize / 1024 / 1024);
         if (needCreateNewDataPartition) {
             logger.info("current data file '{}', size: {} mb, create a new data partition",
                 file.getAbsolutePath(), fileSize / 1024 / 1024);
@@ -108,7 +108,7 @@ public class NaiveParquetStoragePolicy implements ParquetStoragePolicy {
 
     private Pair<Long, List<String>> initDataPartition(String storageUnit) {
         lock.writeLock().lock();
-        Pair<TimeSeriesInterval, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
+        Pair<TimeSeriesRange, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
         long latestStartTime = duBoundary.getV().getStartTime();
         createDir(Paths.get(dataDir, storageUnit, String.valueOf(latestStartTime)));
         lock.writeLock().unlock();
@@ -124,7 +124,7 @@ public class NaiveParquetStoragePolicy implements ParquetStoragePolicy {
         lock.writeLock().lock();
         long latestStartTime = getLatestTime(storageUnit) + 1;
         createDir(Paths.get(dataDir, storageUnit, String.valueOf(latestStartTime)));
-        Pair<TimeSeriesInterval, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
+        Pair<TimeSeriesRange, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
         String startPath = duBoundary.getK().getStartTimeSeries();
         lock.writeLock().unlock();
 
@@ -164,17 +164,17 @@ public class NaiveParquetStoragePolicy implements ParquetStoragePolicy {
                 File[] pathPartition = tDir.listFiles();
                 if (pathPartition != null && pathPartition.length != 0) {
                     for (File pathPartitionFile : pathPartition) {
-                        String startPath = pathPartitionFile.getName().split("_")[2];
-                        startPath = startPath.substring(0, startPath.indexOf(".parquet"));
+                        String startPath = pathPartitionFile.getName().split("__")[2];
+                        startPath = startPath.substring(0, startPath.lastIndexOf(".parquet"));
                         collectInMap(res, startTime, startPath);
                     }
                 } else {
-                    Pair<TimeSeriesInterval, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
+                    Pair<TimeSeriesRange, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
                     collectInMap(res, startTime, duBoundary.getK().getStartTimeSeries());
                 }
             }
         } else {
-            Pair<TimeSeriesInterval, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
+            Pair<TimeSeriesRange, TimeInterval> duBoundary = metaManager.getBoundaryOfStorageUnit(storageUnit);
             collectInMap(res, duBoundary.getV().getStartTime(), duBoundary.getK().getStartTimeSeries());
         }
         lock.readLock().unlock();

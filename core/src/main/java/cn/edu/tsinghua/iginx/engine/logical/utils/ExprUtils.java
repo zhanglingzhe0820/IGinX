@@ -3,7 +3,7 @@ package cn.edu.tsinghua.iginx.engine.logical.utils;
 import cn.edu.tsinghua.iginx.engine.shared.TimeRange;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.*;
 import cn.edu.tsinghua.iginx.exceptions.SQLParserException;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesRange;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,7 +17,7 @@ public class ExprUtils {
         filter = removeSingleFilter(filter);
         FilterType type = filter.getType();
         switch (type) {
-            case Time:
+            case Key:
             case Value:
             case Path:
                 return filter;
@@ -118,7 +118,7 @@ public class ExprUtils {
         filter = removeSingleFilter(filter);
         FilterType type = filter.getType();
         switch (type) {
-            case Time:
+            case Key:
             case Value:
             case Path:
                 return filter;
@@ -240,7 +240,7 @@ public class ExprUtils {
     public static Filter removeNot(Filter filter) {
         FilterType type = filter.getType();
         switch (type) {
-            case Time:
+            case Key:
             case Value:
             case Path:
                 return filter;
@@ -283,8 +283,8 @@ public class ExprUtils {
 
         FilterType type = filter.getType();
         switch (filter.getType()) {
-            case Time:
-                ((TimeFilter) filter).reverseFunc();
+            case Key:
+                ((KeyFilter) filter).reverseFunc();
                 return filter;
             case Value:
                 ((ValueFilter) filter).reverseFunc();
@@ -326,8 +326,8 @@ public class ExprUtils {
             case Value:
             case Path:
                 break;
-            case Time:
-                timeRanges.add(getTimeRangesFromTimeFilter((TimeFilter) f));
+            case Key:
+                timeRanges.add(getTimeRangesFromTimeFilter((KeyFilter) f));
                 break;
             case And:
                 TimeRange range = getTimeRangeFromAndFilter((AndFilter) f);
@@ -357,7 +357,7 @@ public class ExprUtils {
         return intersectTimeRanges(timeRanges);
     }
 
-    private static TimeRange getTimeRangesFromTimeFilter(TimeFilter filter) {
+    private static TimeRange getTimeRangesFromTimeFilter(KeyFilter filter) {
         switch (filter.getOp()) {
             case L:
                 return new TimeRange(0, filter.getValue());
@@ -430,13 +430,13 @@ public class ExprUtils {
         return new TimeRange(begin, end);
     }
 
-    public static Filter getSubFilterFromFragment(Filter filter, TimeSeriesInterval interval) {
+    public static Filter getSubFilterFromFragment(Filter filter, TimeSeriesRange interval) {
         Filter filterWithoutNot = removeNot(filter);
         Filter filterWithTrue = setTrue(filterWithoutNot, interval);
         return mergeTrue(filterWithTrue);
     }
 
-    private static Filter setTrue(Filter filter, TimeSeriesInterval interval) {
+    private static Filter setTrue(Filter filter, TimeSeriesRange interval) {
         switch (filter.getType()) {
             case Or:
                 List<Filter> orChildren = ((OrFilter) filter).getChildren();
@@ -452,7 +452,7 @@ public class ExprUtils {
                     andChildren.set(i, childFilter);
                 }
                 return new AndFilter(andChildren);
-            case Time:
+            case Key:
                 return filter;
             case Value:
                 String path = ((ValueFilter) filter).getPath();

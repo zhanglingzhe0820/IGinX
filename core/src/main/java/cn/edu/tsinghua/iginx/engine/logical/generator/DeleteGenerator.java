@@ -11,10 +11,7 @@ import cn.edu.tsinghua.iginx.engine.shared.source.OperatorSource;
 import cn.edu.tsinghua.iginx.engine.shared.source.Source;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import cn.edu.tsinghua.iginx.metadata.IMetaManager;
-import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.*;
 import cn.edu.tsinghua.iginx.policy.IPolicy;
 import cn.edu.tsinghua.iginx.policy.PolicyManager;
 import cn.edu.tsinghua.iginx.sql.statement.DeleteStatement;
@@ -29,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 public class DeleteGenerator extends AbstractGenerator {
-
+    @SuppressWarnings("unused")
     private static final Logger logger = LoggerFactory.getLogger(InsertGenerator.class);
     private final static DeleteGenerator instance = new DeleteGenerator();
     private final static IMetaManager metaManager = DefaultMetaManager.getInstance();
@@ -52,14 +49,18 @@ public class DeleteGenerator extends AbstractGenerator {
 
         List<String> pathList = SortUtils.mergeAndSortPaths(new ArrayList<>(deleteStatement.getPaths()));
 
-        TimeSeriesInterval interval = new TimeSeriesInterval(pathList.get(0), pathList.get(pathList.size() - 1));
+        TimeSeriesRange interval = new TimeSeriesInterval(pathList.get(0), pathList.get(pathList.size() - 1));
 
-        Map<TimeSeriesInterval, List<FragmentMeta>> fragments = metaManager.getFragmentMapByTimeSeriesInterval(interval);
+        Map<TimeSeriesRange, List<FragmentMeta>> fragments = metaManager.getFragmentMapByTimeSeriesInterval(interval);
         if (fragments.isEmpty()) {
             //on startup
             Pair<List<FragmentMeta>, List<StorageUnitMeta>> fragmentsAndStorageUnits = policy.generateInitialFragmentsAndStorageUnits(deleteStatement);
             metaManager.createInitialFragmentsAndStorageUnits(fragmentsAndStorageUnits.v, fragmentsAndStorageUnits.k);
             fragments = metaManager.getFragmentMapByTimeSeriesInterval(interval);
+        }
+
+        if (metaManager.hasDummyFragment(interval)) {
+            deleteStatement.setInvolveDummyData(true);
         }
 
         TagFilter tagFilter = deleteStatement.getTagFilter();

@@ -86,8 +86,8 @@ public class Query {
                 List<String> queryTimeseries = new ArrayList<>();
                 queryTimeseries.add(timeseries);
                 SessionQueryDataSet dataSet = sessionPool.queryData(queryTimeseries, 0, Long.MAX_VALUE);
-                points += (long) dataSet.getPaths().size() * dataSet.getTimestamps().length;
-                System.out.printf("query timeseries %s consumption time %d ms with point num %d%n", timeseries, (System.currentTimeMillis() - startTime), dataSet.getPaths().size() * dataSet.getTimestamps().length);
+                points += (long) dataSet.getPaths().size() * dataSet.getKeys().length;
+                System.out.printf("query timeseries %s consumption time %d ms with point num %d%n", timeseries, (System.currentTimeMillis() - startTime), dataSet.getPaths().size() * dataSet.getKeys().length);
             }
             return points;
         }

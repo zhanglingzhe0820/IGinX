@@ -11,21 +11,29 @@ import cn.edu.tsinghua.iginx.engine.shared.function.FunctionCall;
 import cn.edu.tsinghua.iginx.engine.shared.function.FunctionUtils;
 import cn.edu.tsinghua.iginx.engine.shared.function.manager.FunctionManager;
 import cn.edu.tsinghua.iginx.engine.shared.operator.*;
+import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Filter;
+import cn.edu.tsinghua.iginx.engine.shared.operator.filter.FilterType;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.FuncType;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.JoinAlgType;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OuterJoinType;
 import cn.edu.tsinghua.iginx.engine.shared.operator.tag.TagFilter;
 import cn.edu.tsinghua.iginx.engine.shared.source.FragmentSource;
 import cn.edu.tsinghua.iginx.engine.shared.source.OperatorSource;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import cn.edu.tsinghua.iginx.metadata.IMetaManager;
-import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.*;
 import cn.edu.tsinghua.iginx.policy.IPolicy;
 import cn.edu.tsinghua.iginx.policy.PolicyManager;
+import cn.edu.tsinghua.iginx.sql.expression.Expression;
+import cn.edu.tsinghua.iginx.sql.expression.Expression.ExpressionType;
 import cn.edu.tsinghua.iginx.sql.statement.SelectStatement;
+import cn.edu.tsinghua.iginx.sql.statement.SelectStatement.QueryType;
 import cn.edu.tsinghua.iginx.sql.statement.Statement;
+import cn.edu.tsinghua.iginx.sql.statement.join.JoinPart;
 import cn.edu.tsinghua.iginx.utils.Pair;
 import cn.edu.tsinghua.iginx.utils.SortUtils;
+import java.util.Arrays;
+import java.util.Collections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +44,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static cn.edu.tsinghua.iginx.engine.shared.Constants.*;
+import static cn.edu.tsinghua.iginx.engine.shared.function.system.ArithmeticExpr.ARITHMETIC_EXPR;
 import static cn.edu.tsinghua.iginx.metadata.utils.FragmentUtils.keyFromTSIntervalToTimeInterval;
 
 public class QueryGenerator extends AbstractGenerator {
@@ -69,7 +78,12 @@ public class QueryGenerator extends AbstractGenerator {
         if (selectStatement.getSubStatement() != null) {
             root = generateRoot(selectStatement.getSubStatement());
         } else {
-            root = filterAndMergeFragments(selectStatement);
+            policy.notify(selectStatement);
+            if (selectStatement.hasJoinParts()) {
+                root = filterAndMergeFragmentsWithJoin(selectStatement);
+            } else {
+                root = filterAndMergeFragments(selectStatement);
+            }
         }
 
         TagFilter tagFilter = selectStatement.getTagFilter();
@@ -79,21 +93,35 @@ public class QueryGenerator extends AbstractGenerator {
         }
 
         List<Operator> queryList = new ArrayList<>();
-        if (selectStatement.getQueryType() == SelectStatement.QueryType.DownSampleQuery) {
+        if (selectStatement.getQueryType() == QueryType.GroupByQuery) {
+            // Downsample Query
+            List<FunctionCall> functionCallList = new ArrayList<>();
+            selectStatement.getBaseExpressionMap().forEach((k, v) -> {
+                if (!k.equals("")) {
+                    v.forEach(expression -> {
+                        Map<String, Value> params = new HashMap<String, Value>(){{
+                            put(PARAM_PATHS, new Value(expression.getPathName()));
+                        }};
+                        functionCallList.add(new FunctionCall(functionManager.getFunction(k), params));
+                    });
+                }
+            });
+            queryList.add(new GroupBy(new OperatorSource(root), selectStatement.getGroupByPaths(), functionCallList));
+        } else if (selectStatement.getQueryType() == SelectStatement.QueryType.DownSampleQuery) {
             // DownSample Query
             Operator finalRoot = root;
-            selectStatement.getSelectedFuncsAndExpressions().forEach((k, v) -> v.forEach(expression -> {
+            selectStatement.getBaseExpressionMap().forEach((k, v) -> v.forEach(expression -> {
                 Map<String, Value> params = new HashMap<>();
                 params.put(PARAM_PATHS, new Value(expression.getPathName()));
                 if (!selectStatement.getLayers().isEmpty()) {
                     params.put(PARAM_LEVELS, new Value(selectStatement.getLayers().stream().map(String::valueOf).collect(Collectors.joining(","))));
                 }
                 Operator copySelect = finalRoot.copy();
-
                 queryList.add(
                     new Downsample(
                         new OperatorSource(copySelect),
                         selectStatement.getPrecision(),
+                        selectStatement.getSlideDistance(),
                         new FunctionCall(functionManager.getFunction(k), params),
                         new TimeRange(selectStatement.getStartTime(), selectStatement.getEndTime())
                     )
@@ -102,40 +130,45 @@ public class QueryGenerator extends AbstractGenerator {
         } else if (selectStatement.getQueryType() == SelectStatement.QueryType.AggregateQuery) {
             // Aggregate Query
             Operator finalRoot = root;
-            selectStatement.getSelectedFuncsAndExpressions().forEach((k, v) -> v.forEach(expression -> {
+            selectStatement.getBaseExpressionMap().forEach((k, v) -> v.forEach(expression -> {
                 Map<String, Value> params = new HashMap<>();
                 params.put(PARAM_PATHS, new Value(expression.getPathName()));
                 if (!selectStatement.getLayers().isEmpty()) {
                     params.put(PARAM_LEVELS, new Value(selectStatement.getLayers().stream().map(String::valueOf).collect(Collectors.joining(","))));
                 }
                 Operator copySelect = finalRoot.copy();
-                logger.info("function: " + k + ", wrapped path: " + v);
-                if (FunctionUtils.isRowToRowFunction(k)) {
-                    queryList.add(
-                        new RowTransform(
-                            new OperatorSource(copySelect),
-                            new FunctionCall(functionManager.getFunction(k), params)
-                        )
-                    );
-                } else if (FunctionUtils.isSetToSetFunction(k)) {
-                    queryList.add(
-                        new MappingTransform(
-                            new OperatorSource(copySelect),
-                            new FunctionCall(functionManager.getFunction(k), params)
-                        )
-                    );
+                if (k.equals("")) {
+                    queryList.add(new Project(new OperatorSource(copySelect),
+                        Collections.singletonList(expression.getPathName()), tagFilter));
                 } else {
-                    queryList.add(
-                        new SetTransform(
-                            new OperatorSource(copySelect),
-                            new FunctionCall(functionManager.getFunction(k), params)
-                        )
-                    );
+                    logger.info("function: " + k + ", wrapped path: " + expression.getPathName());
+                    if (FunctionUtils.isRowToRowFunction(k)) {
+                        queryList.add(
+                            new RowTransform(
+                                new OperatorSource(copySelect),
+                                new FunctionCall(functionManager.getFunction(k), params)
+                            )
+                        );
+                    } else if (FunctionUtils.isSetToSetFunction(k)) {
+                        queryList.add(
+                            new MappingTransform(
+                                new OperatorSource(copySelect),
+                                new FunctionCall(functionManager.getFunction(k), params)
+                            )
+                        );
+                    } else {
+                        queryList.add(
+                            new SetTransform(
+                                new OperatorSource(copySelect),
+                                new FunctionCall(functionManager.getFunction(k), params)
+                            )
+                        );
+                    }
                 }
             }));
         } else if (selectStatement.getQueryType() == SelectStatement.QueryType.LastFirstQuery) {
             Operator finalRoot = root;
-            selectStatement.getSelectedFuncsAndExpressions().forEach((k, v) -> v.forEach(expression -> {
+            selectStatement.getBaseExpressionMap().forEach((k, v) -> v.forEach(expression -> {
                 Map<String, Value> params = new HashMap<>();
                 params.put(PARAM_PATHS, new Value(expression.getPathName()));
                 Operator copySelect = finalRoot.copy();
@@ -149,7 +182,7 @@ public class QueryGenerator extends AbstractGenerator {
             }));
         } else {
             List<String> selectedPath = new ArrayList<>();
-            selectStatement.getSelectedFuncsAndExpressions().forEach((k, v) ->
+            selectStatement.getBaseExpressionMap().forEach((k, v) ->
                 v.forEach(expression -> selectedPath.add(expression.getPathName())));
             queryList.add(new Project(new OperatorSource(root), selectedPath, tagFilter));
         }
@@ -159,12 +192,34 @@ public class QueryGenerator extends AbstractGenerator {
         } else if (selectStatement.getQueryType() == SelectStatement.QueryType.DownSampleQuery) {
             root = OperatorUtils.joinOperatorsByTime(queryList);
         } else {
-            if (selectStatement.getFuncTypeSet().contains(SelectStatement.FuncType.Udtf)) {
+            if (selectStatement.getFuncTypeSet().contains(FuncType.Udtf)) {
                 root = OperatorUtils.joinOperatorsByTime(queryList);
             } else {
                 root = OperatorUtils.joinOperators(queryList, ORDINAL);
             }
         }
+
+        if (selectStatement.getHavingFilter() != null) {
+            root = new Select(new OperatorSource(root), selectStatement.getHavingFilter(), null);
+        }
+
+        List<Operator> exprList = new ArrayList<>();
+        exprList.add(root);
+        for (Expression expression : selectStatement.getExpressions()) {
+            if (!expression.getType().equals(ExpressionType.Base)) {
+                Operator copySelect = root.copy();
+                Map<String, Value> params = new HashMap<>();
+                params.put(PARAM_EXPR, new Value(expression));
+
+                exprList.add(
+                    new RowTransform(
+                        new OperatorSource(copySelect),
+                        new FunctionCall(functionManager.getFunction(ARITHMETIC_EXPR), params)
+                    )
+                );
+            }
+        }
+        root = OperatorUtils.joinOperatorsByTime(exprList);
 
         if (!selectStatement.getOrderByPath().equals("")) {
             root = new Sort(
@@ -182,6 +237,17 @@ public class QueryGenerator extends AbstractGenerator {
             );
         }
 
+        if (selectStatement.getQueryType().equals(SelectStatement.QueryType.LastFirstQuery)) {
+            root = new Reorder(new OperatorSource(root), Arrays.asList("path", "value"));
+        } else {
+            List<String> order = new ArrayList<>();
+            selectStatement.getExpressions().forEach(expression -> {
+                String colName = expression.getColumnName();
+                order.add(colName);
+            });
+            root = new Reorder(new OperatorSource(root), order);
+        }
+
         Map<String, String> aliasMap = selectStatement.getAliasMap();
         if (!aliasMap.isEmpty()) {
             root = new Rename(new OperatorSource(root), aliasMap);
@@ -191,25 +257,86 @@ public class QueryGenerator extends AbstractGenerator {
     }
 
     private Operator filterAndMergeFragments(SelectStatement selectStatement) {
-        policy.notify(selectStatement);
-
         List<String> pathList = SortUtils.mergeAndSortPaths(new ArrayList<>(selectStatement.getPathSet()));
         TagFilter tagFilter = selectStatement.getTagFilter();
 
         TimeSeriesInterval interval = new TimeSeriesInterval(pathList.get(0), pathList.get(pathList.size() - 1));
 
-        Map<TimeSeriesInterval, List<FragmentMeta>> fragmentsByTSInterval = metaManager.getFragmentMapByTimeSeriesInterval(PathUtils.trimTimeSeriesInterval(interval), true);
-        if (!metaManager.hasFragment()) {
-            //on startup
-            Pair<List<FragmentMeta>, List<StorageUnitMeta>> fragmentsAndStorageUnits = policy.generateInitialFragmentsAndStorageUnits(selectStatement);
-            metaManager.createInitialFragmentsAndStorageUnits(fragmentsAndStorageUnits.v, fragmentsAndStorageUnits.k);
-            fragmentsByTSInterval = metaManager.getFragmentMapByTimeSeriesInterval(interval, true);
-        }
-
-        Pair<Map<TimeInterval, List<FragmentMeta>>, List<FragmentMeta>> pair = keyFromTSIntervalToTimeInterval(fragmentsByTSInterval);
+        Pair<Map<TimeInterval, List<FragmentMeta>>, List<FragmentMeta>> pair = getFragmentsByTSInterval(selectStatement, interval);
         Map<TimeInterval, List<FragmentMeta>> fragments = pair.k;
         List<FragmentMeta> dummyFragments = pair.v;
 
+        return mergeRawData(fragments, dummyFragments, pathList, tagFilter);
+    }
+
+    private Operator filterAndMergeFragmentsWithJoin(SelectStatement selectStatement) {
+        List<String> prefixList = new ArrayList<>();
+        prefixList.add(selectStatement.getFromPath() + ALL_PATH_SUFFIX);
+        selectStatement.getJoinParts().forEach(joinPart -> prefixList.add(joinPart.getPathPrefix() + ALL_PATH_SUFFIX));
+
+        TagFilter tagFilter = selectStatement.getTagFilter();
+
+        List<Operator> joinList = new ArrayList<>();
+        // 1. get all data of single prefix like a.* or b.*
+        prefixList.forEach(prefix -> {
+            Pair<Map<TimeInterval, List<FragmentMeta>>, List<FragmentMeta>> pair = getFragmentsByTSInterval(selectStatement, new TimeSeriesInterval(prefix, prefix));
+            Map<TimeInterval, List<FragmentMeta>> fragments = pair.k;
+            List<FragmentMeta> dummyFragments = pair.v;
+            joinList.add(mergeRawData(fragments, dummyFragments, Collections.singletonList(prefix), tagFilter));
+        });
+        // 2. merge by declare
+        Operator left = joinList.get(0);
+        String prefixA = selectStatement.getFromPath();
+        for (int i = 1; i < joinList.size(); i++) {
+            JoinPart joinPart = selectStatement.getJoinParts().get(i - 1);
+            Operator right = joinList.get(i);
+
+            String prefixB = joinPart.getPathPrefix();
+
+            JoinAlgType joinAlgType = JoinAlgType.NestedLoopJoin;
+            Filter filter = joinPart.getFilter();
+            if (filter != null && filter.getType().equals(FilterType.Path)) {
+                joinAlgType = JoinAlgType.HashJoin;
+            }
+
+            List<String> joinColumns = joinPart.getJoinColumns();
+            if (joinColumns != null && joinColumns.size() == 1) {
+                joinAlgType = JoinAlgType.HashJoin;
+            }
+
+            switch (joinPart.getJoinType()) {
+                case CrossJoin:
+                    left = new CrossJoin(new OperatorSource(left), new OperatorSource(right), prefixA, prefixB);
+                    break;
+                case InnerJoin:
+                    left = new InnerJoin(new OperatorSource(left), new OperatorSource(right), prefixA, prefixB, filter, joinColumns, false, joinAlgType);
+                    break;
+                case InnerNatualJoin:
+                    left = new InnerJoin(new OperatorSource(left), new OperatorSource(right), prefixA, prefixB, filter, joinColumns, true, joinAlgType);
+                    break;
+                case LeftNatualJoin:
+                    left = new OuterJoin(new OperatorSource(left), new OperatorSource(right), prefixA, prefixB, OuterJoinType.LEFT, filter, joinColumns, true, joinAlgType);
+                    break;
+                case RightNatualJoin:
+                    new OuterJoin(new OperatorSource(left), new OperatorSource(right), prefixA, prefixB, OuterJoinType.RIGHT, filter, joinColumns, true, joinAlgType);
+                    break;
+                case FullOuterJoin:
+                    left = new OuterJoin(new OperatorSource(left), new OperatorSource(right), prefixA, prefixB, OuterJoinType.FULL, filter, joinColumns, false, joinAlgType);
+                    break;
+                case LeftOuterJoin:
+                    left = new OuterJoin(new OperatorSource(left), new OperatorSource(right), prefixA, prefixB, OuterJoinType.LEFT, filter, joinColumns, false, joinAlgType);
+                    break;
+                case RightOuterJoin:
+                    left = new OuterJoin(new OperatorSource(left), new OperatorSource(right), prefixA, prefixB, OuterJoinType.RIGHT, filter, joinColumns, false, joinAlgType);
+                    break;
+            }
+
+            prefixA = prefixB;
+        }
+        return left;
+    }
+
+    private Operator mergeRawData(Map<TimeInterval, List<FragmentMeta>> fragments, List<FragmentMeta> dummyFragments, List<String> pathList, TagFilter tagFilter) {
         List<Operator> unionList = new ArrayList<>();
         fragments.forEach((k, v) -> {
             List<Operator> joinList = new ArrayList<>();
@@ -220,11 +347,71 @@ public class QueryGenerator extends AbstractGenerator {
         Operator operator = OperatorUtils.unionOperators(unionList);
         if (!dummyFragments.isEmpty()) {
             List<Operator> joinList = new ArrayList<>();
-            dummyFragments.forEach(meta -> joinList.add(new Project(new FragmentSource(meta), pathList, tagFilter)));
+            dummyFragments.forEach(meta -> {
+                if (meta.isValid()) {
+                    String schemaPrefix = meta.getTsInterval().getSchemaPrefix();
+                    joinList.add(new AddSchemaPrefix(new OperatorSource(new Project(new FragmentSource(meta),
+                        pathMatchPrefix(pathList, meta.getTsInterval().getTimeSeries(), schemaPrefix), tagFilter)), schemaPrefix));
+                }
+            });
             joinList.add(operator);
             operator = OperatorUtils.joinOperatorsByTime(joinList);
         }
         return operator;
+    }
 
+    private Pair<Map<TimeInterval, List<FragmentMeta>>, List<FragmentMeta>> getFragmentsByTSInterval(SelectStatement selectStatement, TimeSeriesInterval interval) {
+        Map<TimeSeriesRange, List<FragmentMeta>> fragmentsByTSInterval = metaManager.getFragmentMapByTimeSeriesInterval(PathUtils.trimTimeSeriesInterval(interval), true);
+        if (!metaManager.hasFragment()) {
+            //on startup
+            Pair<List<FragmentMeta>, List<StorageUnitMeta>> fragmentsAndStorageUnits = policy.generateInitialFragmentsAndStorageUnits(selectStatement);
+            metaManager.createInitialFragmentsAndStorageUnits(fragmentsAndStorageUnits.v, fragmentsAndStorageUnits.k);
+            fragmentsByTSInterval = metaManager.getFragmentMapByTimeSeriesInterval(interval, true);
+        }
+        return keyFromTSIntervalToTimeInterval(fragmentsByTSInterval);
+    }
+
+    // 筛选出满足 dataPrefix前缀，并且去除 schemaPrefix
+    private List<String> pathMatchPrefix(List<String> pathList, String prefix, String schemaPrefix) {
+        if (prefix == null && schemaPrefix == null) return pathList;
+        List<String> ans = new ArrayList<>();
+
+        if (prefix == null) { // deal with the schemaPrefix
+            for(String path : pathList) {
+                if (path.equals("*.*") || path.equals("*")) {
+                    ans.add(path);
+                } else if (path.indexOf(schemaPrefix) == 0) {
+                    path = path.substring(schemaPrefix.length() + 1);
+                    ans.add(path);
+                }
+            }
+            return ans;
+        }
+//        if (schemaPrefix != null) prefix = schemaPrefix + "." + prefix;
+
+        for(String path : pathList) {
+            if (schemaPrefix != null && path.indexOf(schemaPrefix) == 0) {
+                path = path.substring(schemaPrefix.length() + 1);
+            }
+            if (path.equals("*.*") || path.equals("*")) {
+                ans.add(prefix + ".*");
+            } else if (path.charAt(path.length()-1) == '*' && path.length() != 1) { // 通配符匹配，例如 a.b.*
+                String queryPrefix = path.substring(0,path.length()-2) + ".(.*)";
+                if (prefix.matches(queryPrefix)) {
+                    ans.add(path);
+                    continue;
+                }
+                queryPrefix = prefix + ".(.*)";
+                if (path.matches(queryPrefix)) {
+                    ans.add(path);
+                }
+            } else if (!path.contains("*")) { // 例如 a.b.f 这样确切的路径信息
+                String queryPrefix = prefix + ".(.*)";
+                if (path.matches(queryPrefix)) {
+                    ans.add(path);
+                }
+            }
+        }
+        return ans;
     }
 }

@@ -20,26 +20,22 @@ package cn.edu.tsinghua.iginx.rest.insert;
 
 import cn.edu.tsinghua.iginx.exceptions.ExecutionException;
 import cn.edu.tsinghua.iginx.exceptions.SessionException;
-import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
-import cn.edu.tsinghua.iginx.metadata.IMetaManager;
 import cn.edu.tsinghua.iginx.rest.RestSession;
 import cn.edu.tsinghua.iginx.rest.bean.*;
 import cn.edu.tsinghua.iginx.rest.query.QueryExecutor;
-import cn.edu.tsinghua.iginx.rest.query.QueryParser;
 import cn.edu.tsinghua.iginx.thrift.DataType;
+import cn.edu.tsinghua.iginx.rest.RestUtils;
+import cn.edu.tsinghua.iginx.thrift.TimePrecision;
 import cn.edu.tsinghua.iginx.utils.TimeUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.text.html.parser.Entity;
-import javax.ws.rs.core.Response;
 import java.io.Reader;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
-import static cn.edu.tsinghua.iginx.rest.bean.SpecialTime.*;
+import static cn.edu.tsinghua.iginx.rest.RestUtils.*;
 
 public class DataPointsParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(DataPointsParser.class);
@@ -86,60 +82,76 @@ public class DataPointsParser {
         }
     }
 
+    private boolean ifInputDataVaild(JsonNode node) {
+        String name = node.get("name").toString();
+        if (!name.contains(".")) {
+            LOGGER.error("The input path should contains at least second order path");
+            return false;
+        }
+        return true;
+    }
     //如果有anno信息会直接放入到插入路径中
-    private Metric getMetricObject(JsonNode node, boolean isAnnotation) {
-        Metric ret = new Metric();
-        ret.setName(node.get("name").asText());
-        Iterator<String> fieldNames = node.get("tags").fieldNames();
-        Iterator<JsonNode> elements = node.get("tags").elements();
-        //insert语句的tag只能有一个val
-        while (elements.hasNext() && fieldNames.hasNext()) {
-            ret.addTag(fieldNames.next(), elements.next().textValue());
-        }
+    private Metric getMetricObject(JsonNode node, boolean isAnnotation) throws Exception {
+        try {
+            Metric ret = new Metric();
+            if (!ifInputDataVaild(node)) {
+                throw new Exception("The input correctness check is abnormal");
+            }
+            ret.setName(node.get("name").asText());
+            Iterator<String> fieldNames = node.get("tags").fieldNames();
+            Iterator<JsonNode> elements = node.get("tags").elements();
+            //insert语句的tag只能有一个val
+            while (elements.hasNext() && fieldNames.hasNext()) {
+                ret.addTag(fieldNames.next(), elements.next().textValue());
+            }
 
-        JsonNode tim = node.get("timestamp"), val = node.get("value");
-        if (tim != null && val != null) {
-            ret.addTimestamp(tim.asLong());
-            ret.addValue(val.asText());
-        }
-        JsonNode dp = node.get("datapoints");
-        if (dp != null) {
-            if (dp.isArray()) {
-                for (JsonNode dpnode : dp) {
-                    if (dpnode.isArray()) {
-                        ret.addTimestamp(dpnode.get(0).asLong());
-                        ret.addValue(dpnode.get(1).asText());
+            JsonNode tim = node.get("timestamp"), val = node.get("value");
+            if (tim != null && val != null) {
+                ret.addKey(tim.asLong());
+                ret.addValue(val.asText());
+            }
+            JsonNode dp = node.get("datapoints");
+            if (dp != null) {
+                if (dp.isArray()) {
+                    for (JsonNode dpnode : dp) {
+                        if (dpnode.isArray()) {
+                            ret.addKey(dpnode.get(0).asLong());
+                            ret.addValue(dpnode.get(1).asText());
+                        }
                     }
                 }
             }
-        }
-        JsonNode anno = node.get("annotation");
-        if (anno != null) {
-            String title=null,description=null;
-            JsonNode titleNode = anno.get("title");
-            if(titleNode!=null)
-                title = titleNode.asText();
-            JsonNode dspNode = anno.get("description");
-            if(dspNode!=null)
-                description = dspNode.asText();
-            List<String> category = new ArrayList<>();
-            JsonNode categoryNode = anno.get("category");
-            if (categoryNode.isArray()) {
-                for (JsonNode objNode : categoryNode) {
-                    category.add(objNode.asText());
+            JsonNode anno = node.get("annotation");
+            if (anno != null) {
+                String title=null,description=null;
+                JsonNode titleNode = anno.get("title");
+                if(titleNode!=null)
+                    title = titleNode.asText();
+                JsonNode dspNode = anno.get("description");
+                if(dspNode!=null)
+                    description = dspNode.asText();
+                List<String> category = new ArrayList<>();
+                JsonNode categoryNode = anno.get("category");
+                if (categoryNode.isArray()) {
+                    for (JsonNode objNode : categoryNode) {
+                        category.add(objNode.asText());
+                    }
                 }
-            }
 
-            //将cat的key与val颠倒后作为tag进行插入
-            for(String cat : category){
-                ret.addTag(cat,"category");
+                //将cat的key与val颠倒后作为tag进行插入
+                for(String cat : category){
+                    ret.addTag(cat, RestUtils.CATEGORY);
+                }
+                if(title!=null)
+                    ret.addAnno("title",title);
+                if(description!=null)
+                    ret.addAnno("description",description);
             }
-            if(title!=null)
-                ret.addAnno("title",title);
-            if(description!=null)
-                ret.addAnno("description",description);
+            return ret;
+        } catch (Exception e) {
+            LOGGER.error("Error occurred during parsing data ", e);
+            throw e;
         }
-        return ret;
     }
 
     public void sendData() {
@@ -170,7 +182,7 @@ public class DataPointsParser {
             query.addQueryMetrics(metric);
             query.setStartAbsolute(1L);
             query.setEndAbsolute(2L);
-            query.setTimePrecision("ns");
+            query.setTimePrecision(TimePrecision.NS);
 
             //执行查询
             QueryExecutor executor = new QueryExecutor(query);
@@ -219,7 +231,7 @@ public class DataPointsParser {
         type.add(DataType.BINARY);
         valuesList[0] = value;
         try {
-            session.insertNonAlignedColumnRecords(paths, timestamps.stream().mapToLong(Long::longValue).toArray(), valuesList, type, null, "ns");
+            session.insertNonAlignedColumnRecords(paths, timestamps.stream().mapToLong(Long::longValue).toArray(), valuesList, type, null, TimePrecision.NS);
         } catch (ExecutionException e) {
             LOGGER.error("Error occurred during insert ", e);
             throw e;
@@ -242,7 +254,7 @@ public class DataPointsParser {
         type.add(DataType.BINARY);
         ANNOPATHS.add(ANNOTAIONSEQUENCE);
         try {
-            session.insertNonAlignedColumnRecords(ANNOPATHS, timestamps.stream().mapToLong(Long::longValue).toArray(), valuesList, type, null, "ns");
+            session.insertNonAlignedColumnRecords(ANNOPATHS, timestamps.stream().mapToLong(Long::longValue).toArray(), valuesList, type, null, TimePrecision.NS);
         } catch (ExecutionException e) {
             LOGGER.error("Error occurred during insert ", e);
             throw e;
@@ -281,7 +293,7 @@ public class DataPointsParser {
             valuesList[0] = valuesAnno;
             type.add(typeAb);
             try {
-                session.insertNonAlignedColumnRecords(paths, timestamps.stream().mapToLong(Long::longValue).toArray(), valuesList, type, tagsList, "ns");
+                session.insertNonAlignedColumnRecords(paths, timestamps.stream().mapToLong(Long::longValue).toArray(), valuesList, type, tagsList, TimePrecision.NS);
             } catch (ExecutionException e) {
                 LOGGER.error("Error occurred during insert ", e);
                 throw e;
@@ -302,7 +314,7 @@ public class DataPointsParser {
             List<String> paths = new ArrayList<>();
             paths.add(path.toString());
 
-            int size = metric.getTimestamps().size();
+            int size = metric.getKeys().size();
             List<DataType> type = new ArrayList<>();
             type.add(findType(metric.getValues()));
 
@@ -313,7 +325,7 @@ public class DataPointsParser {
             }
             valuesList[0] = values;
             try {
-                session.insertNonAlignedColumnRecords(paths, metric.getTimestamps().stream().mapToLong(Long::longValue).toArray(), valuesList, type, tagsList);
+                session.insertNonAlignedColumnRecords(paths, metric.getKeys().stream().mapToLong(Long::longValue).toArray(), valuesList, type, tagsList);
                 if (!metric.getAnno().isEmpty()) {
                     insertAnno(paths,tagsList,metric.getAnno(),type.get(0));
                 }
@@ -350,7 +362,7 @@ public class DataPointsParser {
         StringBuilder name = new StringBuilder();
         Map<String, String> tags = getTagsFromPaths(path, name);
         for(String tag : annotationLimit.getTag()){
-            tags.putIfAbsent(tag, "category");
+            tags.putIfAbsent(tag, RestUtils.CATEGORY);
         }
         metric.setTags(tags);
         return name.toString();
@@ -360,7 +372,7 @@ public class DataPointsParser {
         insertExe(metric, TimeUtils.DEFAULT_TIMESTAMP_PRECISION);
     }
 
-    private void insertExe(Metric metric, String timePrecision) throws Exception {
+    private void insertExe(Metric metric, TimePrecision timePrecision) throws Exception {
         //LHZ以下代码重复了，能否合并到一个函数？？？
         //执行插入
         StringBuilder path = new StringBuilder();
@@ -369,7 +381,7 @@ public class DataPointsParser {
         paths.add(path.toString());
         List<Map<String,String>> taglist = new ArrayList<>();
         taglist.add(metric.getTags());
-        int size = metric.getTimestamps().size();
+        int size = metric.getKeys().size();
         List<DataType> type = new ArrayList<>();
         type.add(findType(metric.getValues()));
         Object[] valuesList = new Object[1];
@@ -380,7 +392,7 @@ public class DataPointsParser {
         valuesList[0] = values;
         try {
             //LHZ 因为我们默认是可以通过加@的路径访问实现确切的插入，所以无需添加tag
-            session.insertNonAlignedColumnRecords(paths, metric.getTimestamps().stream().mapToLong(Long::longValue).toArray(), valuesList, type, taglist, timePrecision);
+            session.insertNonAlignedColumnRecords(paths, metric.getKeys().stream().mapToLong(Long::longValue).toArray(), valuesList, type, taglist, timePrecision);
             if (!metric.getAnno().isEmpty()) {
                 insertAnno(paths,taglist,metric.getAnno(),type.get(0));
             }
@@ -414,7 +426,7 @@ public class DataPointsParser {
                     metricGetData(metric,queryBase,queryResultDataset,queryBase.getAnnotationLimit(),pl);
 
                     //执行插入
-                    insertExe(metric, "ns");
+                    insertExe(metric, TimePrecision.NS);
                 }
             }
         } catch (Exception e) {
@@ -431,12 +443,12 @@ public class DataPointsParser {
         Map<String,String> tags = getTagsFromPaths(path, name);
         Map<String,String> newTags = new TreeMap<>();
         for(Map.Entry<String,String> entry : tags.entrySet()) {
-            if(!entry.getValue().equals("category"))
+            if(!entry.getValue().equals(RestUtils.CATEGORY))
                 newTags.put(entry.getKey(),entry.getValue());
         }
         if(!annoLimit.getTag().isEmpty())
             for(String tag : annoLimit.getTag()) {
-                newTags.putIfAbsent(tag, "category");
+                newTags.putIfAbsent(tag, RestUtils.CATEGORY);
             }
 
         metric.setTags(newTags);
@@ -449,7 +461,7 @@ public class DataPointsParser {
 
         //数量相同就ok
         for(Map.Entry<String,String> entry : tags.entrySet()) {
-            if(entry.getValue().equals("category")) num++;
+            if(entry.getValue().equals(RestUtils.CATEGORY)) num++;
         }
         if(num==annoLimit.getTag().size()) return true;
         return false;
@@ -480,7 +492,7 @@ public class DataPointsParser {
                     //添加anno的title等信息，以及数据点信息
                     metricGetData(metric,queryBase,queryResultDataset,queryBase.getNewAnnotationLimit(),pl);
 
-                    insertExe(metric, "ns");
+                    insertExe(metric, TimePrecision.NS);
                 }
             }
         } catch (Exception e) {
@@ -556,7 +568,7 @@ public class DataPointsParser {
             metric.addAnno("description", anno.getText());
         //添加数据点信息
         for(int tl = 0;tl<queryResultDataset.getTimeLists().get(pl).size();tl++) {
-            metric.addTimestamp(queryResultDataset.getTimeLists().get(pl).get(tl));
+            metric.addKey(queryResultDataset.getTimeLists().get(pl).get(tl));
             Object val = queryResultDataset.getValueLists().get(pl).get(tl);
             metric.addValue(getStringVal(val));
         }

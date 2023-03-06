@@ -30,12 +30,10 @@ import cn.edu.tsinghua.iginx.thrift.DataType;
 import cn.edu.tsinghua.iginx.utils.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import static cn.edu.tsinghua.iginx.engine.shared.Constants.PARAM_LEVELS;
 import static cn.edu.tsinghua.iginx.engine.shared.Constants.PARAM_PATHS;
 
 public class LastValue implements SetMappingFunction {
@@ -83,7 +81,9 @@ public class LastValue implements SetMappingFunction {
         for (int i = 0; i < fields.size(); i++) {
             Field field = fields.get(i);
             if (pattern.matcher(field.getFullName()).matches()) {
-                targetFields.add(new Field(getIdentifier() + "(" + field.getFullName() + ")", field.getType()));
+                String name = getIdentifier() + "(" + field.getName() + ")";
+                String fullName = getIdentifier() + "(" + field.getFullName() + ")";
+                targetFields.add(new Field(name, fullName, field.getType()));
                 indices.add(i);
             }
         }

@@ -19,7 +19,7 @@
 
 @echo off
 echo ````````````````````````
-echo Starting IginX
+echo Starting IGinX
 echo ````````````````````````
 
 if "%OS%" == "Windows_NT" setlocal
@@ -48,11 +48,11 @@ set JAVA_VERSION=%MAJOR_VERSION%
 
 @REM we do not check jdk that version less than 1.6 because they are too stale...
 IF "%JAVA_VERSION%" == "6" (
-		echo IginX only supports jdk >= 8, please check your java version.
+		echo IGinX only supports jdk >= 8, please check your java version.
 		goto finally
 )
 IF "%JAVA_VERSION%" == "7" (
-		echo IginX only supports jdk >= 8, please check your java version.
+		echo IGinX only supports jdk >= 8, please check your java version.
 		goto finally
 )
 

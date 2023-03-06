@@ -33,12 +33,10 @@ import cn.edu.tsinghua.iginx.engine.physical.task.GlobalPhysicalTask;
 import cn.edu.tsinghua.iginx.engine.physical.task.MemoryPhysicalTask;
 import cn.edu.tsinghua.iginx.engine.physical.task.StoragePhysicalTask;
 import cn.edu.tsinghua.iginx.engine.physical.task.TaskExecuteResult;
-import cn.edu.tsinghua.iginx.engine.shared.operator.*;
+import cn.edu.tsinghua.iginx.engine.shared.operator.ShowTimeSeries;
 import cn.edu.tsinghua.iginx.engine.shared.operator.tag.TagFilter;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import cn.edu.tsinghua.iginx.metadata.IMetaManager;
-import cn.edu.tsinghua.iginx.metadata.cache.DefaultMetaCache;
-import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.StorageEngineMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
 import cn.edu.tsinghua.iginx.metadata.hook.StorageEngineChangeHook;
@@ -54,7 +52,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -78,12 +75,6 @@ public class StoragePhysicalTaskExecutor {
 
     private final int maxCachedPhysicalTaskPerStorage = ConfigDescriptor.getInstance().getConfig().getMaxCachedPhysicalTaskPerStorage();
 
-    public final AtomicLong allRequests = new AtomicLong(0);
-
-    public final AtomicLong submittedRequests = new AtomicLong(0);
-
-    public final AtomicLong completedRequests = new AtomicLong(0);
-
     private StoragePhysicalTaskExecutor() {
         StorageUnitHook storageUnitHook = (before, after) -> {
             if (before == null && after != null) { // 新增加 du，处理这种事件，其他事件暂时不处理
@@ -99,89 +90,90 @@ public class StoragePhysicalTaskExecutor {
                 long storageId = after.getStorageEngineId();
                 dispatchers.put(id, dispatcher);
                 dispatcher.submit(() -> {
-                    StoragePhysicalTaskQueue taskQueue = storageTaskQueues.get(id);
-                    Pair<IStorage, ThreadPoolExecutor> p = storageManager.getStorage(storageId);
-                    while (p == null) {
-                        p = storageManager.getStorage(storageId);
-                        logger.info("spinning for IStorage!");
-                        try {
-                            Thread.sleep(5);
-                        } catch (InterruptedException e) {
-                            logger.error("encounter error when spinning: ", e);
-                        }
-                    }
-                    Pair<IStorage, ThreadPoolExecutor> pair = p;
-                    while (true) {
-                        StoragePhysicalTask task = taskQueue.getTask();
-                        task.setStorageUnit(id);
-                        task.setDummyStorageUnit(isDummy);
-                        if (pair.v.getQueue().size() > maxCachedPhysicalTaskPerStorage) {
-                            task.setResult(new TaskExecuteResult(new TooManyPhysicalTasksException(storageId)));
-                            continue;
-                        }
-                        allRequests.incrementAndGet();
-                        pair.v.submit(() -> {
-                            TaskExecuteResult result;
-                            long taskId = System.nanoTime();
-                            submittedRequests.incrementAndGet();
+                    try {
+                        StoragePhysicalTaskQueue taskQueue = storageTaskQueues.get(id);
+                        Pair<IStorage, ThreadPoolExecutor> p = storageManager.getStorage(storageId);
+                        while (p == null) {
+                            p = storageManager.getStorage(storageId);
+                            logger.info("spinning for IStorage!");
                             try {
-                                result = pair.k.execute(task);
-                            } catch (Exception e) {
-                                logger.error("execute task error: ", e);
-                                result = new TaskExecuteResult(new PhysicalException(e));
+                                Thread.sleep(5);
+                            } catch (InterruptedException e) {
+                                logger.error("encounter error when spinning: ", e);
                             }
-                            completedRequests.incrementAndGet();
-                            try {
-                                if (!task.isMigration()) {
-                                    HotSpotMonitor.getInstance()
-                                        .recordAfter(taskId, task.getTargetFragment(),
+                        }
+                        Pair<IStorage, ThreadPoolExecutor> pair = p;
+                        while (true) {
+                            StoragePhysicalTask task = taskQueue.getTask();
+                            task.setStorageUnit(id);
+                            task.setDummyStorageUnit(isDummy);
+                            if (pair.v.getQueue().size() > maxCachedPhysicalTaskPerStorage) {
+                                task.setResult(new TaskExecuteResult(new TooManyPhysicalTasksException(storageId)));
+                                continue;
+                            }
+                            pair.v.submit(() -> {
+                                TaskExecuteResult result = null;
+                                long taskId = System.nanoTime();
+                                try {
+                                    result = pair.k.execute(task);
+                                } catch (Exception e) {
+                                    logger.error("execute task error: " + e);
+                                    result = new TaskExecuteResult(new PhysicalException(e));
+                                }
+                                try {
+                                    if (!task.isMigration()) {
+                                        HotSpotMonitor.getInstance()
+                                            .recordAfter(taskId, task.getTargetFragment(),
+                                                task.getOperators().get(0).getType());
+                                        TimeseriesMonitor.getInstance().recordAfter(taskId, result,
                                             task.getOperators().get(0).getType());
-                                    TimeseriesMonitor.getInstance().recordAfter(taskId, result,
-                                        task.getOperators().get(0).getType());
-                                    RequestsMonitor.getInstance()
-                                        .record(task.getTargetFragment(), task.getOperators().get(0));
+                                        RequestsMonitor.getInstance()
+                                            .record(task.getTargetFragment(), task.getOperators().get(0));
 
-                                    AnalyzeHotSpotMonitor.getInstance().recordWithoutMigration(taskId, task.getTargetFragment(),
-                                        task.getOperators().get(0).getType());
+                                        AnalyzeHotSpotMonitor.getInstance().recordWithoutMigration(taskId, task.getTargetFragment(),
+                                            task.getOperators().get(0).getType());
+                                        AnalyzeRequestsMonitor.getInstance()
+                                            .recordWithoutMigration(task.getTargetFragment(), task.getOperators().get(0));
+                                    }
+                                    AnalyzeHotSpotMonitor.getInstance()
+                                        .recordWithMigration(taskId, task.getTargetFragment(),
+                                            task.getOperators().get(0).getType());
                                     AnalyzeRequestsMonitor.getInstance()
-                                        .recordWithoutMigration(task.getTargetFragment(), task.getOperators().get(0));
+                                        .recordWithMigration(task.getTargetFragment(), task.getOperators().get(0));
+                                } catch (Exception e) {
+                                    logger.error("Monitor catch error:", e);
                                 }
-                                AnalyzeHotSpotMonitor.getInstance()
-                                    .recordWithMigration(taskId, task.getTargetFragment(),
-                                        task.getOperators().get(0).getType());
-                                AnalyzeRequestsMonitor.getInstance()
-                                    .recordWithMigration(task.getTargetFragment(), task.getOperators().get(0));
-                            } catch (Exception e) {
-                                logger.error("Monitor catch error:", e);
-                            }
-                            task.setResult(result);
-                            if (task.getFollowerTask() != null && task.isSync()) { // 只有同步任务才会影响后续任务的执行
-                                MemoryPhysicalTask followerTask = (MemoryPhysicalTask) task.getFollowerTask();
-                                boolean isFollowerTaskReady = followerTask.notifyParentReady();
-                                if (isFollowerTaskReady) {
-                                    memoryTaskExecutor.addMemoryTask(followerTask);
-                                }
-                            }
-                            if (task.isNeedBroadcasting()) { // 需要传播
-                                if (result.getException() != null) {
-                                    logger.error("task " + task + " will not broadcasting to replicas for the sake of exception: " + result.getException());
-                                    task.setResult(new TaskExecuteResult(result.getException()));
-                                } else {
-                                    StorageUnitMeta masterStorageUnit = task.getTargetFragment().getMasterStorageUnit();
-                                    List<String> replicaIds = masterStorageUnit.getReplicas()
-                                        .stream().map(StorageUnitMeta::getId).collect(Collectors.toList());
-                                    replicaIds.add(masterStorageUnit.getId());
-                                    for (String replicaId : replicaIds) {
-                                        if (replicaId.equals(task.getStorageUnit())) {
-                                            continue;
-                                        }
-                                        StoragePhysicalTask replicaTask = new StoragePhysicalTask(task.getOperators(), false, false);
-                                        storageTaskQueues.get(replicaId).addTask(replicaTask);
-                                        logger.info("broadcasting task " + task + " to " + replicaId);
+                                task.setResult(result);
+                                if (task.getFollowerTask() != null && task.isSync()) { // 只有同步任务才会影响后续任务的执行
+                                    MemoryPhysicalTask followerTask = (MemoryPhysicalTask) task.getFollowerTask();
+                                    boolean isFollowerTaskReady = followerTask.notifyParentReady();
+                                    if (isFollowerTaskReady) {
+                                        memoryTaskExecutor.addMemoryTask(followerTask);
                                     }
                                 }
-                            }
-                        });
+                                if (task.isNeedBroadcasting()) { // 需要传播
+                                    if (result.getException() != null) {
+                                        logger.error("task " + task + " will not broadcasting to replicas for the sake of exception: " + result.getException());
+                                        task.setResult(new TaskExecuteResult(result.getException()));
+                                    } else {
+                                        StorageUnitMeta masterStorageUnit = task.getTargetFragment().getMasterStorageUnit();
+                                        List<String> replicaIds = masterStorageUnit.getReplicas()
+                                                .stream().map(StorageUnitMeta::getId).collect(Collectors.toList());
+                                        replicaIds.add(masterStorageUnit.getId());
+                                        for (String replicaId : replicaIds) {
+                                            if (replicaId.equals(task.getStorageUnit())) {
+                                                continue;
+                                            }
+                                            StoragePhysicalTask replicaTask = new StoragePhysicalTask(task.getOperators(), false, false);
+                                            storageTaskQueues.get(replicaId).addTask(replicaTask);
+                                            logger.info("broadcasting task " + task + " to " + replicaId);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    } catch (Exception e) {
+                        logger.error("unexpected exception during dispatcher memory task, please contact developer to check: ", e);
                     }
                 });
                 logger.info("process for new storage unit finished!");
@@ -197,7 +189,7 @@ public class StoragePhysicalTaskExecutor {
         metaManager.registerStorageEngineChangeHook(storageEngineChangeHook);
         metaManager.registerStorageUnitHook(storageUnitHook);
         List<StorageEngineMeta> storages = metaManager.getStorageEngineList();
-        for (StorageEngineMeta storage : storages) {
+        for (StorageEngineMeta storage: storages) {
             if (storage.isHasData()) {
                 storageUnitHook.onChange(null, storage.getDummyStorageUnit());
             }
@@ -229,6 +221,13 @@ public class StoragePhysicalTaskExecutor {
                     }
                     try {
                         List<Timeseries> timeseriesList = pair.k.getTimeSeries();
+                        // fix the schemaPrefix
+                        String schemaPrefix = storage.getSchemaPrefix();
+                        if (schemaPrefix != null) {
+                            for (Timeseries timeseries : timeseriesList) {
+                                timeseries.setPath(schemaPrefix + "." + timeseries.getPath());
+                            }
+                        }
                         timeseriesSet.addAll(timeseriesList);
                     } catch (PhysicalException e) {
                         return new TaskExecuteResult(e);
@@ -269,7 +268,7 @@ public class StoragePhysicalTaskExecutor {
                     // only need part of data.
                     List<Timeseries> tsList = new ArrayList<>();
                     int cur = 0, size = tsSetAfterFilter.size();
-                    for (Iterator<Timeseries> iter = tsSetAfterFilter.iterator(); iter.hasNext(); cur++) {
+                    for(Iterator<Timeseries> iter = tsSetAfterFilter.iterator(); iter.hasNext(); cur++) {
                         if (cur >= size || cur - offset >= limit) {
                             break;
                         }

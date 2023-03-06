@@ -25,10 +25,7 @@ import cn.edu.tsinghua.iginx.session_v2.exception.IginXException;
 import cn.edu.tsinghua.iginx.session_v2.write.Point;
 import cn.edu.tsinghua.iginx.session_v2.write.Record;
 import cn.edu.tsinghua.iginx.session_v2.write.Table;
-import cn.edu.tsinghua.iginx.thrift.DataType;
-import cn.edu.tsinghua.iginx.thrift.InsertNonAlignedColumnRecordsReq;
-import cn.edu.tsinghua.iginx.thrift.InsertNonAlignedRowRecordsReq;
-import cn.edu.tsinghua.iginx.thrift.Status;
+import cn.edu.tsinghua.iginx.thrift.*;
 import cn.edu.tsinghua.iginx.utils.*;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
@@ -49,7 +46,7 @@ import java.util.stream.Collectors;
 import static cn.edu.tsinghua.iginx.utils.ByteUtils.getByteArrayFromLongArray;
 
 public class WriteClientImpl extends AbstractFunctionClient implements WriteClient {
-
+    @SuppressWarnings("unused")
     private static final Logger logger = LoggerFactory.getLogger(WriteClientImpl.class);
 
     private final MeasurementMapper measurementMapper;
@@ -65,7 +62,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     @Override
-    public void writePoint(Point point, String timePrecision) {
+    public void writePoint(Point point, TimePrecision timePrecision) {
         writePoints(Collections.singletonList(point), timePrecision);
     }
 
@@ -75,7 +72,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     @Override
-    public void writePoints(List<Point> points, String timePrecision) {
+    public void writePoints(List<Point> points, TimePrecision timePrecision) {
         SortedMap<String, DataType> measurementMap = new TreeMap<>();
         Set<Long> timestampSet = new HashSet<>();
         for (Point point : points) {
@@ -85,7 +82,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
                 throw new IllegalArgumentException("measurement " + measurement + " has multi data type, which is invalid.");
             }
             measurementMap.putIfAbsent(measurement, dataType);
-            timestampSet.add(point.getTimestamp());
+            timestampSet.add(point.getKey());
         }
         List<String> measurements = new ArrayList<>();
         List<DataType> dataTypeList = new ArrayList<>();
@@ -110,7 +107,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
         }
         for (Point point : points) {
             String measurement = point.getFullName();
-            long timestamp = point.getTimestamp();
+            long timestamp = point.getKey();
             int measurementIndex = measurementIndexMap.get(measurement);
             int timestampIndex = timestampIndexMap.get(timestamp);
             valuesList[measurementIndex][timestampIndex] = point.getValue();
@@ -131,7 +128,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     @Override
-    public void writeRecord(Record record, String timePrecision) {
+    public void writeRecord(Record record, TimePrecision timePrecision) {
         writeRecords(Collections.singletonList(record), timePrecision);
     }
 
@@ -141,7 +138,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     @Override
-    public void writeRecords(List<Record> records, String timePrecision) {
+    public void writeRecords(List<Record> records, TimePrecision timePrecision) {
         SortedMap<String, DataType> measurementMap = new TreeMap<>();
         for (Record record : records) {
             for (int index = 0; index < record.getLength(); index++) {
@@ -168,7 +165,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
 
         SortedMap<Long, Object[]> valuesMap = new TreeMap<>();
         for (Record record : records) {
-            long timestamp = record.getTimestamp();
+            long timestamp = record.getKey();
             Object[] values = valuesMap.getOrDefault(timestamp, new Object[measurements.size()]);
             for (int i = 0; i < record.getValues().size(); i++) {
                 String measurement = record.getFullName(i);
@@ -202,7 +199,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     @Override
-    public <M> void writeMeasurement(M measurement, String timePrecision) {
+    public <M> void writeMeasurement(M measurement, TimePrecision timePrecision) {
         writeMeasurements(Collections.singletonList(measurement), timePrecision);
     }
 
@@ -212,7 +209,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     @Override
-    public <M> void writeMeasurements(List<M> measurements, String timePrecision) {
+    public <M> void writeMeasurements(List<M> measurements, TimePrecision timePrecision) {
         writeRecords(measurements.stream().map(measurementMapper::toRecord).collect(Collectors.toList()), timePrecision);
     }
 
@@ -222,11 +219,11 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     @Override
-    public void writeTable(Table table, String timePrecision) {
+    public void writeTable(Table table, TimePrecision timePrecision) {
         long[] timestamps = new long[table.getLength()];
         Object[][] valuesList = new Object[table.getLength()][];
         for (int i = 0; i < table.getLength(); i++) {
-            timestamps[i] = table.getTimestamp(i);
+            timestamps[i] = table.getKey(i);
             valuesList[i] = table.getValues(i);
         }
         List<String> measurements = table.getMeasurements();
@@ -235,7 +232,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     private void writeColumnData(List<String> paths, long[] timestamps, Object[][] valuesList,
-                                 List<DataType> dataTypeList, List<Map<String, String>> tagsList, String timePrecision) {
+                                 List<DataType> dataTypeList, List<Map<String, String>> tagsList, TimePrecision timePrecision) {
         List<ByteBuffer> valueBufferList = new ArrayList<>();
         List<ByteBuffer> bitmapBufferList = new ArrayList<>();
         for (int i = 0; i < valuesList.length; i++) {
@@ -273,7 +270,7 @@ public class WriteClientImpl extends AbstractFunctionClient implements WriteClie
     }
 
     private void writeRowData(List<String> paths, long[] timestamps, Object[][] valuesList,
-                              List<DataType> dataTypeList, List<Map<String, String>> tagsList, String timePrecision) {
+                              List<DataType> dataTypeList, List<Map<String, String>> tagsList, TimePrecision timePrecision) {
         List<ByteBuffer> valueBufferList = new ArrayList<>();
         List<ByteBuffer> bitmapBufferList = new ArrayList<>();
         for (Object[] values : valuesList) {

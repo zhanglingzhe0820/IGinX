@@ -9,9 +9,7 @@ import com.influxdb.query.FluxColumn;
 import com.influxdb.query.FluxRecord;
 import com.influxdb.query.FluxTable;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static cn.edu.tsinghua.iginx.influxdb.tools.DataTypeTransformer.fromInfluxDB;
@@ -39,13 +37,11 @@ public class SchemaTransformer {
         pathBuilder.append(measurement);
         pathBuilder.append('.');
         pathBuilder.append(field);
+        Map<String, String> tags = new HashMap<>();
         for (Pair<String, String> tagKV: tagKVs) {
-            pathBuilder.append('.');
-            pathBuilder.append(tagKV.k);
-            pathBuilder.append('.');
-            pathBuilder.append(tagKV.v);
+            tags.put(tagKV.k, tagKV.v);
         }
-        return new Field(pathBuilder.toString(), dataType);
+        return new Field(pathBuilder.toString(), dataType, tags);
     }
 
     public static Pair<String, String> processPatternForQuery(String pattern, TagFilter tagFilter) { // 返回的是 bucket_name, query 的信息
@@ -63,7 +59,7 @@ public class SchemaTransformer {
         if (index < parts.length) {
             // 接着处理 field
             String field = parts[index];
-            queryBuilder.append("r._field =~ /").append(InfluxDBSchema.transformField(field)).append("/");
+            queryBuilder.append(" and r._field =~ /").append(InfluxDBSchema.transformField(field)).append("/");
         }
         queryBuilder.append(")");
         return new Pair<>(bucketName, queryBuilder.toString());

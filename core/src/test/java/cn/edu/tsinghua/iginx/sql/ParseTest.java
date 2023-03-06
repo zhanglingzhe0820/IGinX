@@ -1,8 +1,12 @@
 package cn.edu.tsinghua.iginx.sql;
 
+import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Op;
+import cn.edu.tsinghua.iginx.engine.shared.operator.filter.PathFilter;
 import cn.edu.tsinghua.iginx.exceptions.SQLParserException;
+import cn.edu.tsinghua.iginx.sql.expression.BaseExpression;
 import cn.edu.tsinghua.iginx.sql.statement.*;
-import cn.edu.tsinghua.iginx.thrift.DataType;
+import cn.edu.tsinghua.iginx.sql.statement.join.JoinPart;
+import cn.edu.tsinghua.iginx.sql.statement.join.JoinType;
 import cn.edu.tsinghua.iginx.thrift.StorageEngine;
 import org.junit.Test;
 
@@ -22,6 +26,10 @@ public class ParseTest {
         assertEquals(paths, statement.getPaths());
 
         assertEquals(2, statement.getTimes().size());
+
+        insertStr = "SELECT avg_s1 FROM (SELECT AVG(s1) AS avg_s1 FROM us.d1 GROUP [1000, 1600) BY 100ns) WHERE avg_s1 > 1200;";
+        SelectStatement selectStatement = (SelectStatement) TestUtils.buildStatement(insertStr);
+        System.out.println();
     }
 
     @Test
@@ -42,7 +50,6 @@ public class ParseTest {
             "(2021.08.26T16:15:32.001, 1);";
 
         InsertStatement statement = (InsertStatement) TestUtils.buildStatement(insertStr);
-        statement.getTimes();
         List<Long> expectedTimes = Arrays.asList(
             1629965727000000000L,
             1629965727001000000L,
@@ -79,26 +86,6 @@ public class ParseTest {
         assertEquals(5, statement.getTimeOffset());
     }
 
-//    @Test
-//    public void testParseFloatAndInteger() {
-//        String floatAndIntegerStr = "INSERT INTO us.d1 (timestamp, s1, s2) values (1627464728862, 10i, 1.1f), (1627464728863, 11i, 1.2f)";
-//        InsertStatement statement = (InsertStatement) TestUtils.buildStatement(floatAndIntegerStr);
-//        assertEquals("us.d1", statement.getPrefixPath());
-//
-//        List<String> paths = Arrays.asList("us.d1.s1", "us.d1.s2");
-//        assertEquals(paths, statement.getPaths());
-//
-//        assertEquals(2, statement.getTimes().size());
-//
-//        List<DataType> types = Arrays.asList(DataType.INTEGER, DataType.FLOAT);
-//        assertEquals(types, statement.getTypes());
-//
-//        Object[] s1Values = {new Integer(10), new Integer(11)};
-//        Object[] s2Values = {new Float(1.1), new Float(1.2)};
-//        assertEquals(s1Values, (Object[]) statement.getValues()[0]);
-//        assertEquals(s2Values, (Object[]) statement.getValues()[1]);
-//    }
-
     @Test
     public void testParseSelect() {
         String selectStr = "SELECT SUM(c), SUM(d), SUM(e), COUNT(f), COUNT(g) FROM a.b WHERE 100 < time and time < 1000 or d == \"abc\" or \"666\" <= c or (e < 10 and not (f < 10)) GROUP [200, 300) BY 10ns, LEVEL = 2, 3;";
@@ -106,20 +93,18 @@ public class ParseTest {
 
         assertTrue(statement.hasFunc());
         assertTrue(statement.hasValueFilter());
-        assertTrue(statement.hasGroupByTime());
+        assertTrue(statement.hasDownsample());
         assertEquals(SelectStatement.QueryType.DownSampleQuery, statement.getQueryType());
 
-        assertEquals(2, statement.getSelectedFuncsAndExpressions().size());
-        assertTrue(statement.getSelectedFuncsAndExpressions().containsKey("sum"));
-        assertTrue(statement.getSelectedFuncsAndExpressions().containsKey("count"));
+        assertEquals(2, statement.getBaseExpressionMap().size());
+        assertTrue(statement.getBaseExpressionMap().containsKey("sum"));
+        assertTrue(statement.getBaseExpressionMap().containsKey("count"));
 
-        assertEquals("a.b.c", statement.getSelectedFuncsAndExpressions().get("sum").get(0).getPathName());
-        assertEquals("a.b.d", statement.getSelectedFuncsAndExpressions().get("sum").get(1).getPathName());
-        assertEquals("a.b.e", statement.getSelectedFuncsAndExpressions().get("sum").get(2).getPathName());
-        assertEquals("a.b.f", statement.getSelectedFuncsAndExpressions().get("count").get(0).getPathName());
-        assertEquals("a.b.g", statement.getSelectedFuncsAndExpressions().get("count").get(1).getPathName());
-
-        assertEquals(Collections.singletonList("a.b"), statement.getFromPaths());
+        assertEquals("a.b.c", statement.getBaseExpressionMap().get("sum").get(0).getPathName());
+        assertEquals("a.b.d", statement.getBaseExpressionMap().get("sum").get(1).getPathName());
+        assertEquals("a.b.e", statement.getBaseExpressionMap().get("sum").get(2).getPathName());
+        assertEquals("a.b.f", statement.getBaseExpressionMap().get("count").get(0).getPathName());
+        assertEquals("a.b.g", statement.getBaseExpressionMap().get("count").get(1).getPathName());
 
         assertEquals("(((time > 100 && time < 1000) || a.b.d == \"abc\" || a.b.c >= \"666\" || (a.b.e < 10 && !a.b.f < 10)) && time >= 200 && time < 300)", statement.getFilter().toString());
 
@@ -137,30 +122,10 @@ public class ParseTest {
         assertEquals(new HashSet<>(Collections.singletonList("root.a")), statement.getPathSet());
         assertEquals("root.a > 100", statement.getFilter().toString());
 
-        selectStr = "SELECT a, b FROM c, d WHERE a > 10;";
-        statement = (SelectStatement) TestUtils.buildStatement(selectStr);
-        assertEquals(new HashSet<>(Arrays.asList("c.a", "c.b", "d.a", "d.b")), statement.getPathSet());
-        assertEquals("(c.a > 10 && d.a > 10)", statement.getFilter().toString());
-
-        selectStr = "SELECT a, b FROM c, d WHERE a > 10 AND b < 20;";
-        statement = (SelectStatement) TestUtils.buildStatement(selectStr);
-        assertEquals(new HashSet<>(Arrays.asList("c.a", "c.b", "d.a", "d.b")), statement.getPathSet());
-        assertEquals("((c.a > 10 && d.a > 10) && (c.b < 20 && d.b < 20))", statement.getFilter().toString());
-
-        selectStr = "SELECT a, b FROM c, d WHERE INTACT(c.a) > 10 AND INTACT(d.b) < 20;";
-        statement = (SelectStatement) TestUtils.buildStatement(selectStr);
-        assertEquals(new HashSet<>(Arrays.asList("c.a", "c.b", "d.a", "d.b")), statement.getPathSet());
-        assertEquals("(c.a > 10 && d.b < 20)", statement.getFilter().toString());
-
         selectStr = "SELECT a, b FROM root WHERE a > b;";
         statement = (SelectStatement) TestUtils.buildStatement(selectStr);
         assertEquals(new HashSet<>(Arrays.asList("root.a", "root.b")), statement.getPathSet());
         assertEquals("root.a > root.b", statement.getFilter().toString());
-
-        selectStr = "SELECT a, b FROM c, d WHERE a > b;";
-        statement = (SelectStatement) TestUtils.buildStatement(selectStr);
-        assertEquals(new HashSet<>(Arrays.asList("c.a", "c.b", "d.a", "d.b")), statement.getPathSet());
-        assertEquals("(c.a > c.b && c.a > d.b && d.a > c.b && d.a > d.b)", statement.getFilter().toString());
     }
 
     @Test
@@ -173,7 +138,7 @@ public class ParseTest {
 
         selectStr = "SELECT SUM(c) FROM a.b GROUP BY LEVEL = 1, 2;";
         statement = (SelectStatement) TestUtils.buildStatement(selectStr);
-        assertEquals("a.b.c", statement.getSelectedFuncsAndExpressions().get("sum").get(0).getPathName());
+        assertEquals("a.b.c", statement.getBaseExpressionMap().get("sum").get(0).getPathName());
         assertEquals(Arrays.asList(1, 2), statement.getLayers());
     }
 
@@ -186,7 +151,7 @@ public class ParseTest {
 
         String orderBy = "SELECT a FROM test ORDER BY timestamp";
         statement = (SelectStatement) TestUtils.buildStatement(orderBy);
-        assertEquals(SQLConstant.TIME, statement.getOrderByPath());
+        assertEquals(SQLConstant.KEY, statement.getOrderByPath());
         assertTrue(statement.isAscending());
 
         String orderByAndLimit = "SELECT a FROM test ORDER BY test.a DESC LIMIT 10 OFFSET 5;";
@@ -266,7 +231,7 @@ public class ParseTest {
 
         SelectStatement subStatement = statement.getSubStatement();
 
-        Expression expression = subStatement.getSelectedFuncsAndExpressions().get("max").get(0);
+        BaseExpression expression = subStatement.getBaseExpressionMap().get("max").get(0);
         assertEquals("root.a", expression.getPathName());
         assertEquals("max", expression.getFuncName());
         assertEquals("res.max_a", expression.getAlias());
@@ -281,7 +246,7 @@ public class ParseTest {
 
     @Test
     public void testParseAddStorageEngine() {
-        String addStorageEngineStr = "ADD STORAGEENGINE (\"127.0.0.1\", 6667, \"iotdb11\", \"username: root, password: root\"), (\"127.0.0.1\", 6668, \"influxdb\", \"key1: val1, key2: val2\");";
+        String addStorageEngineStr = "ADD STORAGEENGINE (\"127.0.0.1\", 6667, \"iotdb12\", \"username: root, password: root\"), (\"127.0.0.1\", 6668, \"influxdb\", \"key1: val1, key2: val2\");";
         AddStorageEngineStatement statement = (AddStorageEngineStatement) TestUtils.buildStatement(addStorageEngineStr);
 
         assertEquals(2, statement.getEngines().size());
@@ -289,7 +254,7 @@ public class ParseTest {
         Map<String, String> extra01 = new HashMap<>();
         extra01.put("username", "root");
         extra01.put("password", "root");
-        StorageEngine engine01 = new StorageEngine("127.0.0.1", 6667, "iotdb11", extra01);
+        StorageEngine engine01 = new StorageEngine("127.0.0.1", 6667, "iotdb12", extra01);
 
         Map<String, String> extra02 = new HashMap<>();
         extra02.put("key1", "val1");
@@ -330,5 +295,79 @@ public class ParseTest {
         assertEquals(1000000000L, selectStatement.getStartTime());
         assertEquals(2000000000L, selectStatement.getEndTime());
         assertEquals(10L, selectStatement.getPrecision());
+    }
+
+    @Test
+    public void testJoin() {
+        String joinStr = "SELECT * FROM cpu1, cpu2";
+        SelectStatement selectStatement = (SelectStatement) TestUtils.buildStatement(joinStr);
+
+        assertEquals("cpu1", selectStatement.getFromPath());
+        assertEquals(1, selectStatement.getJoinParts().size());
+
+        JoinPart joinPart = new JoinPart("cpu2", JoinType.CrossJoin, null, Collections.emptyList());
+        assertEquals(joinPart, selectStatement.getJoinParts().get(0));
+
+        joinStr = "SELECT * FROM cpu1, cpu2, cpu3";
+        selectStatement = (SelectStatement) TestUtils.buildStatement(joinStr);
+
+        assertEquals("cpu1", selectStatement.getFromPath());
+        assertEquals(2, selectStatement.getJoinParts().size());
+
+        joinPart = new JoinPart("cpu2", JoinType.CrossJoin, null, Collections.emptyList());
+        assertEquals(joinPart, selectStatement.getJoinParts().get(0));
+
+        joinPart = new JoinPart("cpu3", JoinType.CrossJoin, null, Collections.emptyList());
+        assertEquals(joinPart, selectStatement.getJoinParts().get(1));
+
+        joinStr = "SELECT * FROM cpu1 LEFT JOIN cpu2 ON cpu1.usage = cpu2.usage";
+        selectStatement = (SelectStatement) TestUtils.buildStatement(joinStr);
+
+        assertEquals("cpu1", selectStatement.getFromPath());
+        assertEquals(1, selectStatement.getJoinParts().size());
+
+        joinPart = new JoinPart("cpu2", JoinType.LeftOuterJoin,
+            new PathFilter("cpu1.usage", Op.E, "cpu2.usage"), Collections.emptyList());
+        assertEquals(joinPart, selectStatement.getJoinParts().get(0));
+
+        joinStr = "SELECT * FROM cpu1 RIGHT OUTER JOIN cpu2 USING usage";
+        selectStatement = (SelectStatement) TestUtils.buildStatement(joinStr);
+
+        assertEquals("cpu1", selectStatement.getFromPath());
+        assertEquals(1, selectStatement.getJoinParts().size());
+
+        joinPart = new JoinPart("cpu2", JoinType.RightOuterJoin,
+            null, Collections.singletonList("usage"));
+        assertEquals(joinPart, selectStatement.getJoinParts().get(0));
+
+        joinStr = "SELECT * FROM cpu1 FULL OUTER JOIN cpu2 ON cpu1.usage = cpu2.usage";
+        selectStatement = (SelectStatement) TestUtils.buildStatement(joinStr);
+
+        assertEquals("cpu1", selectStatement.getFromPath());
+        assertEquals(1, selectStatement.getJoinParts().size());
+
+        joinPart = new JoinPart("cpu2", JoinType.FullOuterJoin,
+            new PathFilter("cpu1.usage", Op.E, "cpu2.usage"), Collections.emptyList());
+        assertEquals(joinPart, selectStatement.getJoinParts().get(0));
+
+        joinStr = "SELECT * FROM cpu1 JOIN cpu2 ON cpu1.usage = cpu2.usage";
+        selectStatement = (SelectStatement) TestUtils.buildStatement(joinStr);
+
+        assertEquals("cpu1", selectStatement.getFromPath());
+        assertEquals(1, selectStatement.getJoinParts().size());
+
+        joinPart = new JoinPart("cpu2", JoinType.InnerJoin,
+            new PathFilter("cpu1.usage", Op.E, "cpu2.usage"), Collections.emptyList());
+        assertEquals(joinPart, selectStatement.getJoinParts().get(0));
+
+        joinStr = "SELECT * FROM cpu1 INNER JOIN cpu2 USING usage";
+        selectStatement = (SelectStatement) TestUtils.buildStatement(joinStr);
+
+        assertEquals("cpu1", selectStatement.getFromPath());
+        assertEquals(1, selectStatement.getJoinParts().size());
+
+        joinPart = new JoinPart("cpu2", JoinType.InnerJoin,
+            null, Collections.singletonList("usage"));
+        assertEquals(joinPart, selectStatement.getJoinParts().get(0));
     }
 }

@@ -36,26 +36,22 @@ import cn.edu.tsinghua.iginx.engine.shared.data.write.RowDataView;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Delete;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Insert;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Operator;
-import cn.edu.tsinghua.iginx.engine.shared.operator.OperatorType;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Project;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Select;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.AndFilter;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Filter;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Op;
-import cn.edu.tsinghua.iginx.engine.shared.operator.filter.TimeFilter;
+import cn.edu.tsinghua.iginx.engine.shared.operator.filter.KeyFilter;
 import cn.edu.tsinghua.iginx.engine.shared.operator.tag.TagFilter;
 import cn.edu.tsinghua.iginx.iotdb.query.entity.IoTDBQueryRowStream;
 import cn.edu.tsinghua.iginx.iotdb.tools.DataViewWrapper;
 import cn.edu.tsinghua.iginx.iotdb.tools.FilterTransformer;
 import cn.edu.tsinghua.iginx.iotdb.tools.TagKVUtils;
-import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.StorageEngineMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.*;
 import cn.edu.tsinghua.iginx.thrift.DataType;
 import cn.edu.tsinghua.iginx.utils.Pair;
 import cn.edu.tsinghua.iginx.utils.StringUtils;
-import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.iotdb.rpc.IoTDBConnectionException;
 import org.apache.iotdb.rpc.StatementExecutionException;
 import org.apache.iotdb.session.Session;
@@ -171,9 +167,9 @@ public class IoTDBStorage implements IStorage {
                 filter = ((Select) operators.get(1)).getFilter();
             } else {
                 FragmentMeta fragment = task.getTargetFragment();
-                filter = new AndFilter(Arrays.asList(new TimeFilter(Op.GE, fragment.getTimeInterval().getStartTime()), new TimeFilter(Op.L, fragment.getTimeInterval().getEndTime())));
+                filter = new AndFilter(Arrays.asList(new KeyFilter(Op.GE, fragment.getTimeInterval().getStartTime()), new KeyFilter(Op.L, fragment.getTimeInterval().getEndTime())));
             }
-            return isDummyStorageUnit ? executeQueryHistoryTask(project, filter) : executeQueryTask(storageUnit, project, filter, task.isHit());
+            return isDummyStorageUnit ? executeQueryHistoryTask(task.getTargetFragment().getTsInterval(), project, filter) : executeQueryTask(storageUnit, project, filter);
         } else if (op.getType() == OperatorType.Insert) {
             Insert insert = (Insert) op;
             return executeInsertTask(storageUnit, insert);
@@ -184,33 +180,44 @@ public class IoTDBStorage implements IStorage {
         return new TaskExecuteResult(new NonExecutablePhysicalTaskException("unsupported physical task"));
     }
 
-    public Pair<TimeSeriesInterval, TimeInterval> getBoundaryOfStorage() throws PhysicalException {
+    @Override
+    public Pair<TimeSeriesRange, TimeInterval> getBoundaryOfStorage(String dataPrefix) throws PhysicalException {
         List<String> paths = new ArrayList<>();
         try {
-            SessionDataSetWrapper dataSet = sessionPool.executeQueryStatement(SHOW_TIMESERIES);
-            while (dataSet.hasNext()) {
-                RowRecord record = dataSet.next();
-                if (record == null || record.getFields().size() < 4) {
-                    continue;
+            if (dataPrefix == null) {
+                SessionDataSetWrapper dataSet = sessionPool.executeQueryStatement(SHOW_TIMESERIES);
+                while (dataSet.hasNext()) {
+                    RowRecord record = dataSet.next();
+                    if (record == null || record.getFields().size() < 4) {
+                        continue;
+                    }
+                    String path = record.getFields().get(0).getStringValue();
+                    path = path.substring(5);
+                    path = TagKVUtils.splitFullName(path).k;
+                    paths.add(path);
                 }
-                String path = record.getFields().get(0).getStringValue();
-                path = path.substring(5);
-                path = TagKVUtils.splitFullName(path).k;
-                paths.add(path);
+                dataSet.close();
             }
-            dataSet.close();
         } catch (IoTDBConnectionException | StatementExecutionException e) {
             throw new PhysicalTaskExecuteFailureException("get time series failure: ", e);
         }
         paths.sort(String::compareTo);
-        if (paths.size() == 0) {
+        if (paths.size() == 0 && dataPrefix == null) {
             throw new PhysicalTaskExecuteFailureException("no data!");
         }
-        TimeSeriesInterval tsInterval = new TimeSeriesInterval(paths.get(0), StringUtils.nextString(paths.get(paths.size() - 1)));
+        TimeSeriesRange tsInterval;
+        if (dataPrefix == null)
+            tsInterval = new TimeSeriesInterval(paths.get(0), StringUtils.nextString(paths.get(paths.size() - 1)));
+        else
+            tsInterval = new TimeSeriesInterval(dataPrefix, StringUtils.nextString(dataPrefix));
 
         long minTime = 0, maxTime = Long.MAX_VALUE;
         try {
-            SessionDataSetWrapper dataSet = sessionPool.executeQueryStatement("select * from root");
+            SessionDataSetWrapper dataSet;
+            if (dataPrefix == null || dataPrefix.isEmpty())
+                dataSet = sessionPool.executeQueryStatement("select * from root");
+            else
+                dataSet = sessionPool.executeQueryStatement("select " + dataPrefix + " from root");
             if (dataSet.hasNext()) {
                 RowRecord record = dataSet.next();
                 minTime = record.getTimestamp();
@@ -239,14 +246,16 @@ public class IoTDBStorage implements IStorage {
         List<Timeseries> timeseries = new ArrayList<>();
         try {
             SessionDataSetWrapper dataSet = sessionPool.executeQueryStatement(SHOW_TIMESERIES);
-            while (dataSet.hasNext()) {
+            while(dataSet.hasNext()) {
                 RowRecord record = dataSet.next();
                 if (record == null || record.getFields().size() < 4) {
                     continue;
                 }
                 String path = record.getFields().get(0).getStringValue();
-                path = path.substring(5);
-                path = path.substring(path.indexOf('.') + 1);
+                path = path.substring(5); // remove root.
+                if (path.startsWith("unit")) {
+                    path = path.substring(path.indexOf('.') + 1);
+                }
                 Pair<String, Map<String, String>> pair = TagKVUtils.splitFullName(path);
                 String dataTypeName = record.getFields().get(3).getStringValue();
                 switch (dataTypeName) {
@@ -280,7 +289,7 @@ public class IoTDBStorage implements IStorage {
         return timeseries;
     }
 
-    private TaskExecuteResult executeQueryTask(String storageUnit, Project project, Filter filter, boolean isHit) { // 未来可能要用 tsInterval 对查询出来的数据进行过滤
+    private TaskExecuteResult executeQueryTask(String storageUnit, Project project, Filter filter) { // 未来可能要用 tsInterval 对查询出来的数据进行过滤
         try {
             StringBuilder builder = new StringBuilder();
             for (String path : project.getPatterns()) {
@@ -289,9 +298,7 @@ public class IoTDBStorage implements IStorage {
             }
             String statement = String.format(QUERY_DATA, builder.deleteCharAt(builder.length() - 1).toString(), storageUnit, FilterTransformer.toString(filter));
             logger.info("[Query] execute query: " + statement);
-//            long taskId = System.nanoTime();
             RowStream rowStream = new ClearEmptyRowStreamWrapper(new IoTDBQueryRowStream(sessionPool.executeQueryStatement(statement), true, project));
-//            logger.error("isHit = {}, consumption time = {}", isHit, (System.nanoTime() - taskId));
             return new TaskExecuteResult(rowStream);
         } catch (IoTDBConnectionException | StatementExecutionException e) {
             logger.error(e.getMessage());
@@ -299,7 +306,14 @@ public class IoTDBStorage implements IStorage {
         }
     }
 
-    private TaskExecuteResult executeQueryHistoryTask(Project project, Filter filter) { // 未来可能要用 tsInterval 对查询出来的数据进行过滤
+    private String getRealPathWithoutPrefix(String oriPath, String prefix) {
+        if (prefix != null && !prefix.isEmpty() && oriPath.contains(prefix)) {
+            return oriPath.substring(oriPath.indexOf(prefix) + prefix.length() + 1);
+        }
+        return oriPath;
+    }
+
+    private TaskExecuteResult executeQueryHistoryTask(TimeSeriesRange timeSeriesInterval, Project project, Filter filter) { // 未来可能要用 tsInterval 对查询出来的数据进行过滤
         try {
             StringBuilder builder = new StringBuilder();
             for (String path : project.getPatterns()) {
@@ -413,7 +427,7 @@ public class IoTDBStorage implements IStorage {
                 tablet.reset();
             }
             cnt += size;
-        } while (cnt < data.getTimeSize());
+        } while(cnt < data.getTimeSize());
 
         return null;
     }
@@ -492,24 +506,19 @@ public class IoTDBStorage implements IStorage {
                 }
             }
             cnt += size;
-        } while (cnt < data.getTimeSize());
+        } while(cnt < data.getTimeSize());
 
         return null;
     }
 
     private Exception insertColumnRecords(ColumnDataView dataView, String storageUnit) {
-        long outerStartTime = System.nanoTime();
-
-        long startTime = System.nanoTime();
         DataViewWrapper data = new DataViewWrapper(dataView);
         Map<String, Tablet> tablets = new HashMap<>();
         Map<String, List<MeasurementSchema>> schemasMap = new HashMap<>();
         Map<String, List<Integer>> deviceIdToPathIndexes = new HashMap<>();
         int batchSize = Math.min(data.getTimeSize(), BATCH_SIZE);
-        long headerTime = System.nanoTime() - startTime;
 
         // 创建 tablets
-        startTime = System.nanoTime();
         for (int i = 0; i < data.getPathNum(); i++) {
             String path = data.getPath(i);
             String deviceId = PREFIX + storageUnit + "." + path.substring(0, path.lastIndexOf('.'));
@@ -528,23 +537,16 @@ public class IoTDBStorage implements IStorage {
             pathIndexes.add(i);
             deviceIdToPathIndexes.put(deviceId, pathIndexes);
         }
-        long content1Time = System.nanoTime() - startTime;
 
-        startTime = System.nanoTime();
         for (Map.Entry<String, List<MeasurementSchema>> entry : schemasMap.entrySet()) {
             tablets.put(entry.getKey(), new Tablet(entry.getKey(), entry.getValue(), batchSize));
         }
-        long content2Time = System.nanoTime() - startTime;
 
-        long execute1Time = 0;
-        long execute2Time = 0;
-        startTime = System.nanoTime();
         int cnt = 0;
         int[] indexes = new int[data.getPathNum()];
         do {
             int size = Math.min(data.getTimeSize() - cnt, batchSize);
 
-            long executeStartTime = System.nanoTime();
             // 插入 timestamps 和 values
             for (Map.Entry<String, List<Integer>> entry : deviceIdToPathIndexes.entrySet()) {
                 String deviceId = entry.getKey();
@@ -567,26 +569,20 @@ public class IoTDBStorage implements IStorage {
                     }
                 }
             }
-            execute1Time += (System.nanoTime() - executeStartTime);
 
-            executeStartTime = System.nanoTime();
             try {
                 sessionPool.insertTablets(tablets);
             } catch (IoTDBConnectionException | StatementExecutionException e) {
                 logger.error(e.getMessage());
                 return e;
             }
-//            logger.error("insertTablets time: {}", System.nanoTime() - executeStartTime);
 
             for (Tablet tablet : tablets.values()) {
                 tablet.reset();
             }
             cnt += size;
-            execute2Time += (System.nanoTime() - executeStartTime);
-        } while (cnt < data.getTimeSize());
-        long content3Time = System.nanoTime() - startTime;
+        } while(cnt < data.getTimeSize());
 
-//        logger.error("insertColumnRecords execute1 time: {}, execute2 time: {}, header time: {}, content1 time: {}, content2 time: {}, content3 time: {}, outer time: {}", execute1Time, execute2Time, headerTime, content1Time, content2Time, content3Time, System.nanoTime() - outerStartTime);
         return null;
     }
 
@@ -655,7 +651,7 @@ public class IoTDBStorage implements IStorage {
                     tablet.reset();
                 }
                 cnt += size;
-            } while (cnt < data.getTimeSize());
+            } while(cnt < data.getTimeSize());
         }
         return null;
     }
@@ -680,7 +676,7 @@ public class IoTDBStorage implements IStorage {
                     logger.warn("encounter error when delete path: " + e.getMessage());
                     return new TaskExecuteResult(new PhysicalTaskExecuteFailureException("execute delete path task in iotdb11 failure", e));
                 }
-                for (String path : deletedPaths) {
+                for (String path: deletedPaths) {
                     try {
                         sessionPool.executeNonQueryStatement(String.format(DELETE_TIMESERIES_CLAUSE, path));
                     } catch (IoTDBConnectionException | StatementExecutionException e) {
@@ -695,7 +691,7 @@ public class IoTDBStorage implements IStorage {
             try {
                 List<String> paths = determineDeletePathList(storageUnit, delete);
                 if (paths.size() != 0) {
-                    for (TimeRange timeRange : delete.getTimeRanges()) {
+                    for (TimeRange timeRange: delete.getTimeRanges()) {
                         sessionPool.deleteData(paths, timeRange.getActualBeginTime(), timeRange.getActualEndTime());
                     }
                 }
@@ -718,10 +714,10 @@ public class IoTDBStorage implements IStorage {
             List<Timeseries> timeSeries = getTimeSeries();
 
             List<String> pathList = new ArrayList<>();
-            for (Timeseries ts : timeSeries) {
+            for (Timeseries ts: timeSeries) {
                 for (String pattern : patterns) {
                     if (Pattern.matches(StringUtils.reformatPath(pattern), ts.getPath()) &&
-                            TagKVUtils.match(ts.getTags(), tagFilter)) {
+                        TagKVUtils.match(ts.getTags(), tagFilter)) {
                         pathList.add(PREFIX + storageUnit + "." + ts.getPhysicalPath());
                         break;
                     }

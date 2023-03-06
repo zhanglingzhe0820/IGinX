@@ -20,7 +20,7 @@ package cn.edu.tsinghua.iginx.engine.shared.operator.filter;
 
 public enum FilterType {
 
-    Time,
+    Key,
     Value,
     Path,
     Bool,  // holder
@@ -30,18 +30,18 @@ public enum FilterType {
     Not;
 
     public static boolean isLeafFilter(FilterType filterType) {
-        return filterType == Time || filterType == Value || filterType == Path;
+        return filterType == Key || filterType == Value || filterType == Path;
     }
 
     public static boolean isCompoundFilter(FilterType filterType) {
-        return filterType != Time && filterType != Value && filterType != Path;
+        return filterType != Key && filterType != Value && filterType != Path;
     }
 
     public static boolean isTimeFilter(Filter filter) {
         switch (filter.getType()) {
             case Value:
                 return false;
-            case Time:
+            case Key:
                 return true;
             case Not:
                 NotFilter notFilter = (NotFilter) filter;
@@ -62,6 +62,11 @@ public enum FilterType {
                     }
                 }
                 break;
+            // TODO: case label. should we return true?
+            case Bool:
+                break;
+            case Path:
+                break;
         }
         return true;
     }
@@ -70,7 +75,7 @@ public enum FilterType {
         switch (filter.getType()) {
             case Value:
                 return true;
-            case Time:
+            case Key:
                 return false;
             case Not:
                 NotFilter notFilter = (NotFilter) filter;
@@ -90,6 +95,8 @@ public enum FilterType {
                         return false;
                     }
                 }
+                break;
+            default: // TODO: case label
                 break;
         }
         return true;

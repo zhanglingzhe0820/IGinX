@@ -61,7 +61,7 @@ public class InfluxDBHistoryQueryRowStream implements RowStream {
             }
         }
 
-        header = new Header(Field.TIME, fields);
+        header = new Header(Field.KEY, fields);
     }
 
     @Override
@@ -109,6 +109,7 @@ public class InfluxDBHistoryQueryRowStream implements RowStream {
                 FluxTable table = tables.get(j);
                 List<FluxRecord> records = table.getRecords();
                 if (index == records.size()) { // 数据已经消费完毕了
+                    values[ptr++] = null;
                     continue;
                 }
                 FluxRecord record = records.get(index);
@@ -123,6 +124,8 @@ public class InfluxDBHistoryQueryRowStream implements RowStream {
                     if (indices[j] == records.size()) {
                         hasMoreRecords--;
                     }
+                } else {
+                    values[ptr++] = null;
                 }
             }
         }

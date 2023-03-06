@@ -18,6 +18,7 @@
  */
 package cn.edu.tsinghua.iginx.conf;
 
+import cn.edu.tsinghua.iginx.thrift.TimePrecision;
 import cn.edu.tsinghua.iginx.utils.TagKVUtils;
 
 import java.util.ArrayList;
@@ -37,7 +38,7 @@ public class Config {
 
     private String zookeeperConnectionString = "127.0.0.1:2181";
 
-    private String storageEngineList = "127.0.0.1#6667#iotdb11#username=root#password=root#sessionPoolSize=20#dataDir=/path/to/your/data/";
+    private String storageEngineList = "127.0.0.1#6667#iotdb12#username=root#password=root#sessionPoolSize=20#dataDir=/path/to/your/data/";
 
     private int maxAsyncRetryTimes = 2;
 
@@ -47,16 +48,28 @@ public class Config {
 
     private int replicaNum = 1;
 
-    private String timePrecision = "ns";
+    private TimePrecision timePrecision = TimePrecision.NS;
 
     private String databaseClassNames = "iotdb=cn.edu.tsinghua.iginx.iotdb.IoTDBPlanExecutor,influxdb=cn.edu.tsinghua.iginx.influxdb.InfluxDBPlanExecutor,parquet=cn.edu.tsinghua.iginx.parquet.parquetStorage";
     //,opentsdb=cn.edu.tsinghua.iginx.opentsdb.OpenTSDBStorage,timescaledb=cn.edu.tsinghua.iginx.timescaledb.TimescaleDBStorage,postgresql=cn.edu.tsinghua.iginx.postgresql.PostgreSQLStorage
 
     private String policyClassName = "cn.edu.tsinghua.iginx.policy.dynamic.DynamicPolicy";
 
-    private boolean enableMonitor = true;
+    private boolean enableFragmentCompaction = false;
+
+    private boolean enableInstantCompaction = false; // 启动即时分片合并，仅用于测试
+
+    private long fragmentCompactionWriteThreshold = 1000;
+
+    private long fragmentCompactionReadThreshold = 1000;
+
+    private double fragmentCompactionReadRatioThreshold = 0.1;
+
+    private long reshardFragmentTimeMargin = 60;
 
     private boolean isEnableDynamicMigration = true;
+
+    private boolean enableMonitor = true;
 
     private int loadBalanceCheckInterval = 3;
 
@@ -73,8 +86,6 @@ public class Config {
     private double maxTimeseriesLoadBalanceThreshold = 2;
 
     private int timeseriesloadBalanceCheckInterval = 30;
-
-    private long reshardFragmentTimeMargin = 60;
 
     private boolean isEnableCustomizableReplica = false;
 
@@ -97,8 +108,6 @@ public class Config {
     private int asyncRestThreadPool = 100;
 
     private boolean enableRestService = true;
-
-    private String fileDataDir = "";
 
     private String etcdEndpoints = "http://localhost:2379";
 
@@ -178,6 +187,10 @@ public class Config {
 
     private int expectedStorageUnitNum = 0;
 
+    private int minThriftWorkerThreadNum = 20;
+
+    private int maxThriftWrokerThreadNum = 2147483647;
+
     //////////////
 
     public static final String tagNameAnnotation = TagKVUtils.tagNameAnnotation;
@@ -187,6 +200,8 @@ public class Config {
     public static final String tagSuffix = TagKVUtils.tagSuffix;
 
     /////////////
+
+    private boolean isLocalParquetStorage = true;
 
     public int getMaxTimeseriesLength() {
         return maxTimeseriesLength;
@@ -276,7 +291,7 @@ public class Config {
         this.replicaNum = replicaNum;
     }
 
-    public String getTimePrecision() {
+    public TimePrecision getTimePrecision() {
         return timePrecision;
     }
 
@@ -318,6 +333,46 @@ public class Config {
 
     public void setPolicyClassName(String policyClassName) {
         this.policyClassName = policyClassName;
+    }
+
+    public boolean isEnableFragmentCompaction() {
+        return enableFragmentCompaction;
+    }
+
+    public void setEnableFragmentCompaction(boolean enableFragmentCompaction) {
+        this.enableFragmentCompaction = enableFragmentCompaction;
+    }
+
+    public boolean isEnableInstantCompaction() {
+        return enableInstantCompaction;
+    }
+
+    public void setEnableInstantCompaction(boolean enableInstantCompaction) {
+        this.enableInstantCompaction = enableInstantCompaction;
+    }
+
+    public long getFragmentCompactionWriteThreshold() {
+        return fragmentCompactionWriteThreshold;
+    }
+
+    public void setFragmentCompactionWriteThreshold(long fragmentCompactionWriteThreshold) {
+        this.fragmentCompactionWriteThreshold = fragmentCompactionWriteThreshold;
+    }
+
+    public long getFragmentCompactionReadThreshold() {
+        return fragmentCompactionReadThreshold;
+    }
+
+    public void setFragmentCompactionReadThreshold(long fragmentCompactionReadThreshold) {
+        this.fragmentCompactionReadThreshold = fragmentCompactionReadThreshold;
+    }
+
+    public double getFragmentCompactionReadRatioThreshold() {
+        return fragmentCompactionReadRatioThreshold;
+    }
+
+    public void setFragmentCompactionReadRatioThreshold(double fragmentCompactionReadRatioThreshold) {
+        this.fragmentCompactionReadRatioThreshold = fragmentCompactionReadRatioThreshold;
     }
 
     public long getMigrationBatchSize() {
@@ -462,14 +517,6 @@ public class Config {
 
     public void setMetaStorage(String metaStorage) {
         this.metaStorage = metaStorage;
-    }
-
-    public String getFileDataDir() {
-        return fileDataDir;
-    }
-
-    public void setFileDataDir(String fileDataDir) {
-        this.fileDataDir = fileDataDir;
     }
 
     public long getDisorderMargin() {
@@ -790,5 +837,29 @@ public class Config {
 
     public void setExpectedStorageUnitNum(int expectedStorageUnitNum) {
         this.expectedStorageUnitNum = expectedStorageUnitNum;
+    }
+
+    public int getMinThriftWorkerThreadNum() {
+        return minThriftWorkerThreadNum;
+    }
+
+    public void setMinThriftWorkerThreadNum(int minThriftWorkerThreadNum) {
+        this.minThriftWorkerThreadNum = minThriftWorkerThreadNum;
+    }
+
+    public int getMaxThriftWrokerThreadNum() {
+        return maxThriftWrokerThreadNum;
+    }
+
+    public void setMaxThriftWrokerThreadNum(int maxThriftWrokerThreadNum) {
+        this.maxThriftWrokerThreadNum = maxThriftWrokerThreadNum;
+    }
+
+    public boolean isLocalParquetStorage() {
+        return isLocalParquetStorage;
+    }
+
+    public void setLocalParquetStorage(boolean localParquetStorage) {
+        isLocalParquetStorage = localParquetStorage;
     }
 }

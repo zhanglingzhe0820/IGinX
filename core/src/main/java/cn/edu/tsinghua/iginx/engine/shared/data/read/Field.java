@@ -18,7 +18,7 @@
  */
 package cn.edu.tsinghua.iginx.engine.shared.data.read;
 
-import cn.edu.tsinghua.iginx.engine.shared.Constants;
+import cn.edu.tsinghua.iginx.constant.GlobalConstant;
 import cn.edu.tsinghua.iginx.thrift.DataType;
 
 import java.util.Collections;
@@ -28,7 +28,7 @@ import java.util.TreeMap;
 
 public final class Field {
 
-    public static final Field TIME = new Field();
+    public static final Field KEY = new Field();
 
     private final String name;
 
@@ -39,7 +39,7 @@ public final class Field {
     private final DataType type;
 
     public Field() {
-        this(Constants.TIMESTAMP, DataType.LONG, Collections.emptyMap());
+        this(GlobalConstant.KEY_NAME, DataType.LONG, Collections.emptyMap());
     }
 
     public Field(String name, DataType type) {
@@ -71,6 +71,17 @@ public final class Field {
             builder.append('}');
             this.fullName = builder.toString();
         }
+    }
+
+    public Field(String name, String fullName, DataType type) {
+        this(name, fullName, type, Collections.emptyMap());
+    }
+
+    public Field(String name, String fullName, DataType type, Map<String, String> tags) {
+        this.name = name;
+        this.fullName = fullName;
+        this.type = type;
+        this.tags = tags;
     }
 
     public String getName() {

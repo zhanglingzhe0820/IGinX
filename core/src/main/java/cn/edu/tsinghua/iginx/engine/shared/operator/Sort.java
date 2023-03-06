@@ -19,6 +19,7 @@
 package cn.edu.tsinghua.iginx.engine.shared.operator;
 
 import cn.edu.tsinghua.iginx.engine.shared.Constants;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.source.Source;
 
 public class Sort extends AbstractUnaryOperator {
@@ -28,7 +29,7 @@ public class Sort extends AbstractUnaryOperator {
     private final SortType sortType;
 
     public Sort(Source source) {
-        this(source, Constants.TIMESTAMP, SortType.ASC);
+        this(source, Constants.KEY, SortType.ASC);
     }
 
     public Sort(Source source, String sortBy, SortType sortType) {
@@ -61,4 +62,8 @@ public class Sort extends AbstractUnaryOperator {
         DESC
     }
 
+    @Override
+    public String getInfo() {
+        return "SortBy: " + sortBy + ", SortType: " + sortType;
+    }
 }

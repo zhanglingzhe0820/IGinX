@@ -73,6 +73,7 @@ public class FunctionManager {
         registerFunction(Max.getInstance());
         registerFunction(Min.getInstance());
         registerFunction(Sum.getInstance());
+        registerFunction(ArithmeticExpr.getInstance());
     }
 
     private void initBasicUDFFunctions() {
@@ -178,6 +179,7 @@ public class FunctionManager {
             functions.put(identifier, udsf);
             return udsf;
         } else {
+            interpreter.close();
             throw new IllegalArgumentException(String.format("UDF %s registered in type %s", identifier, taskMeta.getType()));
         }
     }

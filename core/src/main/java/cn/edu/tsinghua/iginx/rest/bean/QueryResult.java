@@ -23,6 +23,7 @@ import cn.edu.tsinghua.iginx.metadata.IMetaManager;
 import cn.edu.tsinghua.iginx.rest.query.QueryParser;
 import cn.edu.tsinghua.iginx.rest.query.aggregator.QueryAggregator;
 import cn.edu.tsinghua.iginx.rest.query.aggregator.QueryAggregatorType;
+import cn.edu.tsinghua.iginx.rest.RestUtils;
 import cn.edu.tsinghua.iginx.utils.TimeUtils;
 import lombok.Data;
 import org.slf4j.Logger;
@@ -30,7 +31,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
-import static cn.edu.tsinghua.iginx.rest.bean.SpecialTime.TOPTIEM;
+import static cn.edu.tsinghua.iginx.rest.RestUtils.TOPTIEM;
 
 @Data
 public class QueryResult {
@@ -148,7 +149,7 @@ public class QueryResult {
         QueryParser parser = new QueryParser();
         Map<String,String> tags = parser.getTagsFromPaths(path, new StringBuilder());
         for (Map.Entry<String, String> entry : tags.entrySet()) {
-            if(!entry.getValue().equals("category")) {
+            if(!entry.getValue().equals(RestUtils.CATEGORY)) {
                 ret.append("\"" + entry.getKey() + "\" : [\"" + entry.getValue() + "\"],");
             }
         }
@@ -258,7 +259,9 @@ public class QueryResult {
             long timeRes = TimeUtils.getTimeFromNsToSpecPrecision(queryResultDatasets.get(num).getTimestamps().get(i), TimeUtils.DEFAULT_TIMESTAMP_PRECISION);
             ret.append(String.format("[%d,", timeRes));
             if (queryResultDatasets.get(num).getValues().get(i) instanceof byte[]) {
+                ret.append("\"");
                 ret.append(new String((byte[]) queryResultDatasets.get(num).getValues().get(i)));
+                ret.append("\"");
             } else {
                 ret.append(queryResultDatasets.get(num).getValues().get(i).toString());
             }
@@ -276,12 +279,14 @@ public class QueryResult {
         List<Long> timeLists = queryResultDatasets.get(num).getTimeLists().get(now);
         List<Object> valueLists = queryResultDatasets.get(num).getValueLists().get(now);
 
-        for(int j=0; j<timeLists.size(); j++) {
-            if(timeLists.get(j)>TOPTIEM) continue;
+        for (int j = 0; j < timeLists.size(); j++) {
+            if (timeLists.get(j) > TOPTIEM) continue;
             long timeInPrecision = TimeUtils.getTimeFromNsToSpecPrecision(timeLists.get(j), TimeUtils.DEFAULT_TIMESTAMP_PRECISION);
             ret.append(String.format("[%d,", timeInPrecision));
             if (valueLists.get(j) instanceof byte[]) {
+                ret.append("\"");
                 ret.append(new String((byte[]) valueLists.get(j)));
+                ret.append("\"");
             } else {
                 ret.append(valueLists.get(j).toString());
             }

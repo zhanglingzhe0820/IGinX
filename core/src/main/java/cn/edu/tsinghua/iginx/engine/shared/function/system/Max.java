@@ -31,7 +31,6 @@ import cn.edu.tsinghua.iginx.thrift.DataType;
 import cn.edu.tsinghua.iginx.utils.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -82,7 +81,9 @@ public class Max implements SetMappingFunction {
         for (int i = 0; i < rows.getHeader().getFieldSize(); i++) {
             Field field = rows.getHeader().getField(i);
             if (pattern.matcher(field.getFullName()).matches()) {
-                targetFields.add(new Field(getIdentifier() + "(" + field.getFullName() + ")", field.getType()));
+                String name = getIdentifier() + "(" + field.getName() + ")";
+                String fullName = getIdentifier() + "(" + field.getFullName() + ")";
+                targetFields.add(new Field(name, fullName, field.getType()));
                 indices.add(i);
             }
         }

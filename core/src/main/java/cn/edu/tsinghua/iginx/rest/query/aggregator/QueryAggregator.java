@@ -19,8 +19,12 @@
 package cn.edu.tsinghua.iginx.rest.query.aggregator;
 
 import cn.edu.tsinghua.iginx.rest.RestSession;
+import cn.edu.tsinghua.iginx.rest.RestUtils;
 import cn.edu.tsinghua.iginx.rest.bean.QueryResultDataset;
 import cn.edu.tsinghua.iginx.session.SessionQueryDataSet;
+import cn.edu.tsinghua.iginx.thrift.AggregateType;
+import cn.edu.tsinghua.iginx.thrift.DataType;
+import cn.edu.tsinghua.iginx.thrift.TimePrecision;
 import cn.edu.tsinghua.iginx.utils.TimeUtils;
 
 import java.util.ArrayList;
@@ -101,11 +105,11 @@ public abstract class QueryAggregator {
         return doAggregate(session, paths, tagList, startTimestamp, endTimestamp, TimeUtils.DEFAULT_TIMESTAMP_PRECISION);
     }
 
-    public QueryResultDataset doAggregate(RestSession session, List<String> paths, Map<String, List<String>> tagList, long startTimestamp, long endTimestamp, String timePrecision) {
+    public QueryResultDataset doAggregate(RestSession session, List<String> paths, Map<String, List<String>> tagList, long startTimestamp, long endTimestamp, TimePrecision timePrecision) {
         QueryResultDataset queryResultDataset = new QueryResultDataset();
         SessionQueryDataSet sessionQueryDataSet = session.queryData(paths, startTimestamp, endTimestamp, tagList, timePrecision);
         queryResultDataset.setPaths(getPathsFromSessionQueryDataSet(sessionQueryDataSet));
-        int n = sessionQueryDataSet.getTimestamps().length;
+        int n = sessionQueryDataSet.getKeys().length;
         int m = sessionQueryDataSet.getPaths().size();
         int datapoints = 0;
         for (int j = 0; j < m; j++) {
@@ -115,7 +119,7 @@ public abstract class QueryAggregator {
                 if (sessionQueryDataSet.getValues().get(i).get(j) != null) {
                     value.add(sessionQueryDataSet.getValues().get(i).get(j));
 //                    long timeRes = TimeUtils.getTimeFromNsToSpecPrecision(sessionQueryDataSet.getTimestamps()[i], TimeUtils.DEFAULT_TIMESTAMP_PRECISION);
-                    long timeRes = sessionQueryDataSet.getTimestamps()[i];
+                    long timeRes = sessionQueryDataSet.getKeys()[i];
                     time.add(timeRes);
                     queryResultDataset.add(timeRes, sessionQueryDataSet.getValues().get(i).get(j));
                     datapoints += 1;
@@ -130,10 +134,41 @@ public abstract class QueryAggregator {
         return queryResultDataset;
     }
 
+    public QueryResultDataset doAggregateWithDownsampleQuery(RestSession session, AggregateType aggregateType, List<String> paths, Map<String, List<String>> tagList, long startTimestamp, long endTimestamp, TimePrecision timePrecision) {
+        QueryResultDataset queryResultDataset = new QueryResultDataset();
+        try {
+            SessionQueryDataSet sessionQueryDataSet = session.downsampleQuery(paths, tagList, startTimestamp, endTimestamp, aggregateType, getDur(), timePrecision);
+            queryResultDataset.setPaths(getPathsFromSessionQueryDataSet(sessionQueryDataSet));
+            DataType type = RestUtils.checkType(sessionQueryDataSet);
+            int n = sessionQueryDataSet.getKeys().length;
+            int m = sessionQueryDataSet.getPaths().size();
+            int datapoints = 0;
+            for (int j = 0; j < m; j++) {
+                List<Object> value = new ArrayList<>();
+                List<Long> time = new ArrayList<>();
+                for (int i = 0; i < n; i++) {
+                    if (sessionQueryDataSet.getValues().get(i).get(j) != null) {
+                        value.add(sessionQueryDataSet.getValues().get(i).get(j));
+                        long timeRes = sessionQueryDataSet.getKeys()[i];
+                        time.add(timeRes);
+                        queryResultDataset.add(timeRes, sessionQueryDataSet.getValues().get(i).get(j));
+                        datapoints += 1;
+                    }
+                }
+                queryResultDataset.addValueLists(value);
+                queryResultDataset.addTimeLists(time);
+            }
+            queryResultDataset.setSampleSize(datapoints);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return queryResultDataset;
+    }
+
     public List<String> getPathsFromSessionQueryDataSet(SessionQueryDataSet sessionQueryDataSet) {
         List<String> ret = new ArrayList<>();
         List<Boolean> notNull = new ArrayList<>();
-        int n = sessionQueryDataSet.getTimestamps().length;
+        int n = sessionQueryDataSet.getKeys().length;
         int m = sessionQueryDataSet.getPaths().size();
         for (int i = 0; i < m; i++) {
             notNull.add(false);

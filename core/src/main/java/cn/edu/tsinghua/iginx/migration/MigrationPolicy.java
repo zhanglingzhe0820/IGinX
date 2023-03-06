@@ -679,7 +679,7 @@ public abstract class MigrationPolicy {
                     sourceStorageId, targetStorageId,
                     MigrationExecuteType.RESHARD_TIME));
             // [startTime, +∞) & (startPath, endPath)
-            TimeSeriesInterval tsInterval = fragmentMeta.getTsInterval();
+            TimeSeriesRange tsInterval = fragmentMeta.getTsInterval();
             TimeInterval timeInterval = fragmentMeta.getTimeInterval();
             List<Long> storageEngineList = new ArrayList<>();
             storageEngineList.add(targetStorageId);

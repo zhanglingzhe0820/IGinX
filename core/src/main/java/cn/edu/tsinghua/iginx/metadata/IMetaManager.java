@@ -25,7 +25,6 @@ import cn.edu.tsinghua.iginx.metadata.hook.StorageUnitHook;
 import cn.edu.tsinghua.iginx.policy.simple.TimeSeriesCalDO;
 import cn.edu.tsinghua.iginx.sql.statement.InsertStatement;
 import cn.edu.tsinghua.iginx.thrift.AuthType;
-
 import cn.edu.tsinghua.iginx.utils.Pair;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +41,11 @@ public interface IMetaManager {
      * 批量新增存储引擎节点
      */
     boolean addStorageEngines(List<StorageEngineMeta> storageEngineMetas);
+
+    /**
+     * 更新存储引擎节点
+     */
+    boolean updateStorageEngine(long storageID, StorageEngineMeta storageEngineMeta);
 
     /**
      * 获取所有的存储引擎实例的原信息（包括每个存储引擎的存储单元列表）
@@ -77,40 +81,52 @@ public interface IMetaManager {
     long getIginxId();
 
     /**
+     * 获取所有的分片，用于 debug
+     */
+    List<FragmentMeta> getFragments();
+
+    List<FragmentMeta> getFragmentsByStorageUnit(String storageUnitId);
+
+    /**
      * 获取某个du的时空范围
      * */
-    Pair<TimeSeriesInterval,TimeInterval> getBoundaryOfStorageUnit(String storageUnitId);
+    Pair<TimeSeriesRange,TimeInterval> getBoundaryOfStorageUnit(String storageUnitId);
 
     /**
      * 获取某个时间序列区间的所有分片，不会返回虚拟堆叠分片
      */
-    Map<TimeSeriesInterval, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesInterval tsInterval);
+    Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesRange tsInterval);
 
     /**
      * 获取某个时间序列区间的所有分片，根据参数决定是否返回虚拟堆叠分片
      */
-    Map<TimeSeriesInterval, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesInterval tsInterval, boolean withDummyFragment);
+    Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesRange tsInterval, boolean withDummyFragment);
+
+    /**
+     * 查询某个时间序列区间是否有虚拟堆叠分片
+     */
+    boolean hasDummyFragment(TimeSeriesRange tsInterval);
 
     /**
      * 获取某个时间区间的所有最新的分片（这些分片一定也都是未终结的分片）
      */
-    Map<TimeSeriesInterval, FragmentMeta> getLatestFragmentMapByTimeSeriesInterval(TimeSeriesInterval tsInterval);
+    Map<TimeSeriesRange, FragmentMeta> getLatestFragmentMapByTimeSeriesInterval(TimeSeriesRange tsInterval);
 
     /**
      * 获取全部最新的分片，不会返回虚拟堆叠分片
      */
-    Map<TimeSeriesInterval, FragmentMeta> getLatestFragmentMap();
+    Map<TimeSeriesRange, FragmentMeta> getLatestFragmentMap();
 
     /**
      * 获取某个时间序列区间在某个时间区间的所有分片，不会返回虚拟堆叠分片。
      */
-    Map<TimeSeriesInterval, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesInterval tsInterval,
+    Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval,
                                                                                                   TimeInterval timeInterval);
 
     /**
      * 获取某个时间序列区间在某个时间区间的所有分片，根据参数决定是否返回虚拟堆叠分片
      */
-    Map<TimeSeriesInterval, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesInterval tsInterval,
+    Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval,
                                                                                                   TimeInterval timeInterval, boolean withDummyFragment);
 
     /**
@@ -263,11 +279,13 @@ public interface IMetaManager {
 
     void doneReshard();
 
+    void removeFragment(FragmentMeta fragmentMeta);
+
     void addFragment(FragmentMeta fragmentMeta);
 
     void endFragmentByTimeSeriesInterval(FragmentMeta fragmentMeta, String endTimeSeries);
 
-    void updateFragmentByTsInterval(TimeSeriesInterval tsInterval, FragmentMeta fragmentMeta);
+    void updateFragmentByTsInterval(TimeSeriesRange tsInterval, FragmentMeta fragmentMeta);
 
     void addCustomizableReplicaFragmentMeta(FragmentMeta sourceFragment, List<FragmentMeta> replicaFragment);
 

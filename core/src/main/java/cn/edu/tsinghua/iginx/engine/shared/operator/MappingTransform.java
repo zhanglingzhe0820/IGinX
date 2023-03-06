@@ -20,6 +20,7 @@ package cn.edu.tsinghua.iginx.engine.shared.operator;
 
 import cn.edu.tsinghua.iginx.engine.shared.function.FunctionCall;
 import cn.edu.tsinghua.iginx.engine.shared.function.MappingType;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.source.Source;
 
 public class MappingTransform extends AbstractUnaryOperator {
@@ -44,5 +45,10 @@ public class MappingTransform extends AbstractUnaryOperator {
     @Override
     public Operator copy() {
         return null;
+    }
+
+    @Override
+    public String getInfo() {
+        return "Func: " + functionCall.toString();
     }
 }

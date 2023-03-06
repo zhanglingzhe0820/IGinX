@@ -60,7 +60,9 @@ enum SqlType {
     ShowJobStatus,
     CancelJob,
     ShowEligibleJob,
-    StopMigration
+    RemoveHistoryDataResource,
+    StopMigration,
+    Compact
 }
 
 enum AuthType {
@@ -109,6 +111,19 @@ enum UDFType {
     TRANSFORM
 }
 
+enum TimePrecision {
+    YEAR,
+    MONTH,
+    WEEK,
+    DAY,
+    HOUR,
+    MIN,
+    S,
+    MS,
+    US,
+    NS
+}
+
 struct Status {
     1: required i32 code
     2: optional string message
@@ -142,7 +157,7 @@ struct InsertColumnRecordsReq {
     5: required list<binary> bitmapList
     6: required list<DataType> dataTypeList
     7: optional list<map<string, string>> tagsList
-    8: optional string timePrecision
+    8: optional TimePrecision timePrecision
 }
 
 struct InsertNonAlignedColumnRecordsReq {
@@ -153,7 +168,7 @@ struct InsertNonAlignedColumnRecordsReq {
     5: required list<binary> bitmapList
     6: required list<DataType> dataTypeList
     7: optional list<map<string, string>> tagsList
-    8: optional string timePrecision
+    8: optional TimePrecision timePrecision
 }
 
 struct InsertRowRecordsReq {
@@ -164,7 +179,7 @@ struct InsertRowRecordsReq {
     5: required list<binary> bitmapList
     6: required list<DataType> dataTypeList
     7: optional list<map<string, string>> tagsList
-    8: optional string timePrecision
+    8: optional TimePrecision timePrecision
 }
 
 struct InsertNonAlignedRowRecordsReq {
@@ -175,7 +190,7 @@ struct InsertNonAlignedRowRecordsReq {
     5: required list<binary> bitmapList
     6: required list<DataType> dataTypeList
     7: optional list<map<string, string>> tagsList
-    8: optional string timePrecision
+    8: optional TimePrecision timePrecision
 }
 
 struct DeleteDataInColumnsReq {
@@ -184,7 +199,7 @@ struct DeleteDataInColumnsReq {
     3: required i64 startTime
     4: required i64 endTime
     5: optional map<string, list<string>> tagsList
-    6: optional string timePrecision
+    6: optional TimePrecision timePrecision
 }
 
 struct QueryDataSet {
@@ -199,7 +214,7 @@ struct QueryDataReq {
     3: required i64 startTime
     4: required i64 endTime
     5: optional map<string, list<string>> tagsList
-    6: optional string timePrecision
+    6: optional TimePrecision timePrecision
 }
 
 struct QueryDataResp {
@@ -234,7 +249,7 @@ struct AggregateQueryReq {
     4: required i64 endTime
     5: required AggregateType aggregateType
     6: optional map<string, list<string>> tagsList
-    7: optional string timePrecision
+    7: optional TimePrecision timePrecision
 }
 
 struct AggregateQueryResp {
@@ -251,7 +266,7 @@ struct LastQueryReq {
     2: required list<string> paths
     3: required i64 startTime
     4: optional map<string, list<string>> tagsList
-    5: optional string timePrecision
+    5: optional TimePrecision timePrecision
 }
 
 struct LastQueryResp {
@@ -270,7 +285,7 @@ struct DownsampleQueryReq {
     5: required AggregateType aggregateType
     6: required i64 precision
     7: optional map<string, list<string>> tagsList
-    8: optional string timePrecision
+    8: optional TimePrecision timePrecision
 }
 
 struct DownsampleQueryResp {
@@ -380,6 +395,8 @@ struct StorageEngineInfo {
     2: required string ip
     3: required i32 port
     4: required string type
+    5: optional string schemaPrefix
+    6: optional string dataPrefix
 }
 
 struct MetaStorageInfo {
@@ -530,6 +547,63 @@ struct CurveMatchResp {
     3: optional i64 matchedTimestamp
 }
 
+enum DebugInfoType {
+    GET_META,
+}
+
+struct GetMetaReq {
+    1: required bool byCache
+}
+
+struct Fragment {
+    1: required string storageUnitId
+    2: required i64 startTime
+    3: required i64 endTime
+    4: required string startTs
+    5: required string endTs
+}
+
+struct Storage {
+    1: required i64 id
+    2: required string ip
+    3: required i64 port
+    4: required string type
+}
+
+struct StorageUnit {
+    1: required string id
+    2: required string masterId
+    3: required i64 storageId
+}
+
+struct GetMetaResp {
+    1: required list<Fragment> fragments
+    2: required list<Storage> storages
+    3: required list<StorageUnit> storageUnits
+}
+
+struct DebugInfoReq {
+    1: required DebugInfoType payloadType
+    2: required binary payload
+}
+
+struct DebugInfoResp {
+    1: required Status status
+    2: optional binary payload
+}
+
+struct RemovedStorageEngineInfo {
+    1: required string ip
+    2: required i32 port
+    3: required string schemaPrefix
+    4: required string dataPrefix
+}
+
+struct RemoveHistoryDataSourceReq {
+    1: required i64 sessionId
+    2: required list<RemovedStorageEngineInfo> dummyStorageInfoList
+}
+
 service IService {
 
     OpenSessionResp openSession(1: OpenSessionReq req);
@@ -553,6 +627,8 @@ service IService {
     Status scaleInStorageEngines(1: ScaleInStorageEnginesReq req);
 
     Status addStorageEngines(1: AddStorageEnginesReq req);
+
+    Status removeHistoryDataSource(1: RemoveHistoryDataSourceReq req);
 
     AggregateQueryResp aggregateQuery(1: AggregateQueryReq req);
 
@@ -597,4 +673,6 @@ service IService {
     GetRegisterTaskInfoResp getRegisterTaskInfo(1: GetRegisterTaskInfoReq req);
 
     CurveMatchResp curveMatch(1: CurveMatchReq req);
+
+    DebugInfoResp debugInfo(1: DebugInfoReq req);
 }

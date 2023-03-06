@@ -5,6 +5,7 @@ import cn.edu.tsinghua.iginx.exceptions.SessionException;
 import cn.edu.tsinghua.iginx.session.*;
 import cn.edu.tsinghua.iginx.session.QueryDataSet;
 import cn.edu.tsinghua.iginx.thrift.*;
+import cn.edu.tsinghua.iginx.utils.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,6 +13,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReentrantLock;
+
+import static java.lang.Math.max;
 
 public class SessionPool {
     private static final Logger logger = LoggerFactory.getLogger(SessionPool.class);
@@ -21,27 +25,30 @@ public class SessionPool {
     private static final int RETRY = 3;
     private static final int FINAL_RETRY = RETRY - 1;
 
-    private final ConcurrentLinkedDeque<Session> queue = new ConcurrentLinkedDeque<>();
+    final ReentrantLock rLock = new ReentrantLock(false);
+    private ConcurrentHashMap<Pair<String, Integer>, Integer> queueMapIndex = new ConcurrentHashMap<>();
+    private List<ConcurrentLinkedDeque<Session>> queueList = new ArrayList<>();
     // for session whose resultSet is not released.
     private final ConcurrentMap<Session, Session> occupied = new ConcurrentHashMap<>();
 
     private long waitToGetSessionTimeoutInMs;
 
-    private int size = 0;
-    private int maxSize = 0;
+    private volatile int size = 0;
+    private int maxSize;
+    private final int validSessionSize;
 
     private static final String USERNAME = "root";
 
     private static final String PASSWORD = "root";
 
+    private static final int THREAD_NUMBER_MINSIZE = 1;
+
     private static final int MAXSIZE = 10;
     private static long WAITTOGETSESSIONTIMEOUTINMS = 60_000;
+    private static int DEFAULTMAXSIZE = 5;
 
-    // parameters for Session constructor
-    private final String host;
-    private final int port;
-    private final String user;
-    private final String password;
+    private List<IginxInfo> iginxList;
+    private List<Integer> sessionNum;
 
     // whether the queue is closed.
     private boolean closed;
@@ -83,23 +90,122 @@ public class SessionPool {
             String password,
             int maxSize,
             long waitToGetSessionTimeoutInMs) {
-        this.maxSize = maxSize;
-        this.host = host;
-        this.port = port;
-        this.user = user;
-        this.password = password;
+        this.maxSize = max(maxSize,THREAD_NUMBER_MINSIZE);
+        iginxList = new ArrayList<>();
+        sessionNum = new ArrayList<>();
+        iginxList.add(new IginxInfo.Builder()
+                .host(host)
+                .port(port)
+                .user(user)
+                .password(password)
+                .build()
+        );
+        sessionNum.add(this.maxSize);
+        validSessionSize = sessionNum.size();
         this.waitToGetSessionTimeoutInMs = waitToGetSessionTimeoutInMs;
     }
 
-    private Session constructNewSession() {
-        Session session;
+    public SessionPool(
+            List<IginxInfo> IginxList
+    ) {
+        this(IginxList,
+                new ArrayList<Integer>(){{for (int i=0; i<IginxList.size(); i++) add(1);}},
+                DEFAULTMAXSIZE, WAITTOGETSESSIONTIMEOUTINMS);
+    }
+
+    public SessionPool(
+            List<IginxInfo> IginxList,
+            int maxSize
+    ) {
+        this(IginxList,
+                new ArrayList<Integer>(){{for (int i=0; i<IginxList.size(); i++) add(1);}},
+                maxSize, WAITTOGETSESSIONTIMEOUTINMS);
+    }
+
+    public SessionPool(
+            List<IginxInfo> IginxList,
+            List<Integer> sessionNum,
+            int maxSize
+    ) {
+        this(IginxList, sessionNum, maxSize, WAITTOGETSESSIONTIMEOUTINMS);
+    }
+
+    public SessionPool(
+            List<IginxInfo> iginxList,
+            List<Integer> sessionNum,
+            int maxSize,
+            long waitToGetSessionTimeoutInMs
+    ) {
+        validSessionSize = sessionNum.size();
+        if (sessionNum.size() < iginxList.size()) {
+            logger.warn(
+                    "IGinX list size {}, distributive session size {}, the remaining IGinX will not get session connection",
+                    iginxList.size(),
+                    sessionNum.size());
+            for (int i=sessionNum.size(); i<iginxList.size(); i++) {
+                sessionNum.add(0);
+            }
+        }
+        this.iginxList = iginxList;
+        this.sessionNum = sessionNum;
+        this.maxSize = max(maxSize,THREAD_NUMBER_MINSIZE);
+        this.waitToGetSessionTimeoutInMs = waitToGetSessionTimeoutInMs;
+    }
+
+    private Session constructSession(int index) {
+        IginxInfo iginxInfo = iginxList.get(index);
+        return new Session(
+                iginxInfo.getHost(),
+                iginxInfo.getPort(),
+                iginxInfo.getUser(),
+                iginxInfo.getPassword());
+    }
+
+    private int getIndexOfIginx(int currentSize) {
+        int index = currentSize % validSessionSize, times = currentSize / validSessionSize;
+        for (int i=0; i<validSessionSize; i++) {
+            if (sessionNum.get(index) >= times) {
+                return index;
+            } else {
+                index++;
+                index = index % validSessionSize;
+            }
+        }
+        return currentSize % validSessionSize;
+    }
+
+    private Session constructNewSession(int currentSize) {
         // Construct custom Session
-        session = new Session(host, port, user, password);
+        return constructSession(getIndexOfIginx(currentSize));
+    }
+
+    private Session constructNewSession(Session oldSession) {
+        // Construct custom Session
+        return new Session(
+                oldSession.getHost(),
+                oldSession.getPort(),
+                oldSession.getUsername(),
+                oldSession.getPassword());
+    }
+
+    private Session getSessionFromQueue(int index) {
+        int len = iginxList.size(), times = index % len;
+        Session session = null;
+        if (queueList.size() == 0) return null;
+        if (queueList.size() > times) {
+            session = queueList.get(times).poll();
+        }
+        for (ConcurrentLinkedDeque<Session> queue : queueList) {
+            session = queue.poll();
+            if (session != null) break;
+        }
+
         return session;
     }
 
     private Session getSession() throws SessionException {
-        Session session = queue.poll();
+
+        Session session = getSessionFromQueue(size);
         if (closed) {
             throw new SessionException(SESSION_POOL_IS_CLOSED);
         }
@@ -124,33 +230,36 @@ public class SessionPool {
                 // we have to wait for someone returns a session.
                 try {
                     if (logger.isDebugEnabled()) {
-                        logger.debug("no more sessions can be created, wait... queue.size={}", queue.size());
+                        logger.debug("no more sessions can be created, wait... queue.size={}", currentAvailableSize());
                     }
                     this.wait(1000);
                     long timeOut = Math.min(waitToGetSessionTimeoutInMs, 60_000);
                     if (System.currentTimeMillis() - start > timeOut) {
+                        IginxInfo iginxInfo = iginxList.get(getIndexOfIginx(size));
                         logger.warn(
                                 "the SessionPool has wait for {} seconds to get a new connection: {}:{} with {}, {}",
                                 (System.currentTimeMillis() - start) / 1000,
-                                host,
-                                port,
-                                user,
-                                password);
+                                iginxInfo.getHost(),
+                                iginxInfo.getPassword(),
+                                iginxInfo.getUser(),
+                                iginxInfo.getPassword());
                         logger.warn(
                                 "current occupied size {}, queue size {}, considered size {} ",
                                 occupied.size(),
-                                queue.size(),
+                                currentAvailableSize(),
                                 size);
                         if (System.currentTimeMillis() - start > waitToGetSessionTimeoutInMs) {
                             throw new SessionException(
-                                    String.format("timeout to get a connection from %s:%s", host, port));
+                                    String.format("timeout to get a connection from %s:%s",
+                                            iginxInfo.getHost(),
+                                            iginxInfo.getPort()));
                         }
                     }
                 } catch (InterruptedException e) {
                     // wake up from this.wait(1000) by this.notify()
                 }
 
-                session = queue.poll();
+                session = getSessionFromQueue(size);
 
                 if (closed) {
                     throw new SessionException(SESSION_POOL_IS_CLOSED);
@@ -159,12 +268,13 @@ public class SessionPool {
         }
 
         if (shouldCreate) {
+            IginxInfo iginxInfo = iginxList.get(getIndexOfIginx(size));
             // create a new one.
             if (logger.isDebugEnabled()) {
-                logger.debug("Create a new redirect Session {}, {}", user, password);
+                logger.debug("Create a new redirect Session {}, {}", iginxInfo.getUser(), iginxInfo.getPassword());
             }
 
-            session = constructNewSession();
+            session = constructNewSession(size);
 
             try {
                 session.openSession();
@@ -195,7 +305,11 @@ public class SessionPool {
     }
 
     public int currentAvailableSize() {
-        return queue.size();
+        int len = 0;
+        for (ConcurrentLinkedDeque<Session> sessions : queueList) {
+            len += sessions.size();
+        }
+        return len;
     }
 
     public int currentOccupiedSize() {
@@ -203,7 +317,16 @@ public class SessionPool {
     }
 
     private void putBack(Session session) {
-        queue.push(session);
+        rLock.lock();
+        try {
+            queueList.add(new ConcurrentLinkedDeque<Session>(){{
+                push(session);
+            }});
+            queueMapIndex.putIfAbsent(new Pair<>(session.getHost(), session.getPort()), queueList.size());
+        } finally {
+            rLock.unlock();
+        }
+
         synchronized (this) {
             // we do not need to notifyAll as any waited thread can continue to work after waked up.
             this.notify();
@@ -219,8 +342,8 @@ public class SessionPool {
         occupied.put(session, session);
     }
 
-    private void tryConstructNewSession() {
-        Session session = constructNewSession();
+    private void tryConstructNewSession(Session oldSession) {
+        Session session = constructNewSession(oldSession);
         try {
             session.openSession();
             // avoid someone has called close() the session pool
@@ -230,7 +353,7 @@ public class SessionPool {
                     session.closeSession();
                     throw new SessionException(SESSION_POOL_IS_CLOSED);
                 }
-                queue.push(session);
+                putBack(session);
                 this.notify();
             }
         } catch (SessionException e) {
@@ -246,9 +369,10 @@ public class SessionPool {
     }
 
     public synchronized void close() throws SessionException {
-        for (Session session : queue) {
+        for (ConcurrentLinkedDeque<Session> sessionsQueue : queueList) {
             try {
-                session.closeSession();
+                for (Session session : sessionsQueue)
+                    session.closeSession();
             } catch (SessionException e) {
                 // do nothing
                 logger.warn(CLOSE_THE_SESSION_FAILED, e);
@@ -264,7 +388,9 @@ public class SessionPool {
         }
         logger.info("closing the session pool, cleaning queues...");
         this.closed = true;
-        queue.clear();
+        for (ConcurrentLinkedDeque<Session> sessionsQueue : queueList) {
+            sessionsQueue.clear();
+        }
         occupied.clear();
     }
 
@@ -315,15 +441,33 @@ public class SessionPool {
         }
     }
 
+    public void removeHistoryDataSource(List<RemovedStorageEngineInfo> removedStorageEngineList) throws SessionException, ExecutionException {
+        for (int i = 0; i < RETRY; i++) {
+            Session session = getSession();
+            try {
+                session.removeHistoryDataSource(removedStorageEngineList);
+                putBack(session);
+                return;
+            } catch (SessionException e) {
+                // TException means the connection is broken, remove it and get a new one.
+                logger.warn("remove history data source failed", e);
+                cleanSessionAndMayThrowConnectionException(session, i, e);
+            } catch (ExecutionException | RuntimeException e) {
+                putBack(session);
+                throw e;
+            }
+        }
+    }
+
     private void cleanSessionAndMayThrowConnectionException(
             Session session, int times, SessionException e) throws SessionException {
         closeSession(session);
-        tryConstructNewSession();
+        tryConstructNewSession(session);
         if (times == FINAL_RETRY) {
             throw new SessionException(
                     String.format(
                             "retry to execute statement on %s:%s failed %d times: %s",
-                            host, port, RETRY, e.getMessage()),
+                            session.getHost(), session.getPort(), RETRY, e.getMessage()),
                     e);
         }
     }
@@ -424,7 +568,7 @@ public class SessionPool {
     }
 
     public void insertColumnRecords(List<String> paths, long[] timestamps, Object[] valuesList,
-                                    List<DataType> dataTypeList, List<Map<String, String>> tagsList, String precision) throws SessionException, ExecutionException {
+                                    List<DataType> dataTypeList, List<Map<String, String>> tagsList, TimePrecision precision) throws SessionException, ExecutionException {
         for (int i = 0; i < RETRY; i++) {
             Session session = getSession();
             try {
@@ -481,7 +625,7 @@ public class SessionPool {
     }
 
     public void insertNonAlignedColumnRecords(List<String> paths, long[] timestamps, Object[] valuesList,
-                                              List<DataType> dataTypeList, List<Map<String, String>> tagsList, String precision)
+                                              List<DataType> dataTypeList, List<Map<String, String>> tagsList, TimePrecision precision)
             throws SessionException, ExecutionException {
         for (int i = 0; i < RETRY; i++) {
             Session session = getSession();
@@ -520,7 +664,7 @@ public class SessionPool {
     }
 
     public void insertRowRecords(List<String> paths, long[] timestamps, Object[] valuesList,
-                                 List<DataType> dataTypeList, List<Map<String, String>> tagsList, String precison) throws SessionException, ExecutionException {
+                                 List<DataType> dataTypeList, List<Map<String, String>> tagsList, TimePrecision precison) throws SessionException, ExecutionException {
         for (int i = 0; i < RETRY; i++) {
             Session session = getSession();
             try {
@@ -577,7 +721,7 @@ public class SessionPool {
     }
 
     public void insertNonAlignedRowRecords(List<String> paths, long[] timestamps, Object[] valuesList,
-                                           List<DataType> dataTypeList, List<Map<String, String>> tagsList, String precision)
+                                           List<DataType> dataTypeList, List<Map<String, String>> tagsList, TimePrecision precision)
             throws SessionException, ExecutionException {
         for (int i = 0; i < RETRY; i++) {
             Session session = getSession();

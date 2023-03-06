@@ -35,6 +35,7 @@ public class OpenTSDBRowStream implements RowStream {
 
     private int hasMoreRecords;
 
+    @SuppressWarnings("unchecked")
     public OpenTSDBRowStream(List<QueryResult> resultList, boolean trimStorageUnit) {
         this.resultList = resultList;
         this.trimStorageUnit = trimStorageUnit;
@@ -50,7 +51,7 @@ public class OpenTSDBRowStream implements RowStream {
             Pair<String, Map<String, String>> pair = TagKVUtils.splitFullName(path);
             fields.add(new Field(pair.getK(), dataType, pair.getV()));
         }
-        this.header = new Header(Field.TIME, fields);
+        this.header = new Header(Field.KEY, fields);
 
         this.iterators = new Iterator[this.resultList.size()];
         this.curData = new Map.Entry[this.resultList.size()];

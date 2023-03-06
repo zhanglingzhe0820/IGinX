@@ -1,5 +1,6 @@
 package cn.edu.tsinghua.iginx.monitor;
 
+import cn.edu.tsinghua.iginx.compaction.CompactionManager;
 import cn.edu.tsinghua.iginx.conf.ConfigDescriptor;
 import cn.edu.tsinghua.iginx.engine.physical.PhysicalEngineImpl;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
@@ -29,6 +30,7 @@ public class MonitorManager implements Runnable {
     private boolean isScaleIn = false;
 
     private final IMetaManager metaManager = DefaultMetaManager.getInstance();
+    private final CompactionManager compactionManager = CompactionManager.getInstance();
     private static MonitorManager INSTANCE;
 
     public static MonitorManager getInstance() {
@@ -116,6 +118,7 @@ public class MonitorManager implements Runnable {
         while (true) {
             try {
                 //清空节点信息
+                compactionManager.clearFragment();
                 metaManager.clearMonitors();
                 Thread.sleep(interval * 1000L);
                 if (isScaleIn) {

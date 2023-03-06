@@ -20,11 +20,7 @@ package cn.edu.tsinghua.iginx.policy.historical;
 
 import cn.edu.tsinghua.iginx.conf.ConfigDescriptor;
 import cn.edu.tsinghua.iginx.metadata.IMetaManager;
-import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.StorageEngineMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.*;
 import cn.edu.tsinghua.iginx.metadata.hook.StorageEngineChangeHook;
 import cn.edu.tsinghua.iginx.policy.IPolicy;
 import cn.edu.tsinghua.iginx.policy.Utils;
@@ -97,7 +93,7 @@ public class HistoricalPolicy implements IPolicy {
         List<FragmentMeta> fragmentList = new ArrayList<>();
         List<StorageUnitMeta> storageUnitList = new ArrayList<>();
 
-        TimeInterval timeInterval = new TimeInterval(0, Long.MAX_VALUE);
+        TimeInterval timeInterval = Utils.getTimeIntervalFromDataStatement(statement);
         List<StorageEngineMeta> storageEngineList = iMetaManager.getStorageEngineList();
         int storageEngineNum = storageEngineList.size();
         int replicaNum = Math.min(1 + ConfigDescriptor.getInstance().getConfig().getReplicaNum(), storageEngineNum);
@@ -107,7 +103,7 @@ public class HistoricalPolicy implements IPolicy {
         int expectedStorageUnitNum = ConfigDescriptor.getInstance().getConfig().getExpectedStorageUnitNum();
 
         List<String> prefixList = new ArrayList<>();
-        List<TimeSeriesInterval> timeSeriesIntervalList = new ArrayList<>();
+        List<TimeSeriesRange> timeSeriesIntervalList = new ArrayList<>();
         for (String historicalPrefix : historicalPrefixList) {
             for (String suffix : suffixList) {
                 if (!prefixList.contains(historicalPrefix + suffix)) {

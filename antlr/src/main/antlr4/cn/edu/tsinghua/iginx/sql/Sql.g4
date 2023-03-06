@@ -7,7 +7,7 @@ sqlStatement
 statement
     : INSERT INTO path tagList? insertColumnsSpec VALUES insertValuesSpec #insertStatement
     | DELETE FROM path (COMMA path)* whereClause? withClause? #deleteStatement
-    | queryClause #selectStatement
+    | EXPLAIN? queryClause #selectStatement
     | COUNT POINTS #countPointsStatement
     | DELETE TIME SERIES path (COMMA path)* withClause? #deleteTimeSeriesStatement
     | CLEAR DATA #clearDataStatement
@@ -24,6 +24,8 @@ statement
     | CANCEL TRANSFORM JOB jobId=INT #cancelJobStatement
     | SHOW jobStatus TRANSFORM JOB #showEligibleJobStatement
     | STOP MIGRATION #stopMigrationStatement
+    | REMOVE HISTORYDATARESOURCE removedStorageEngine (COMMA removedStorageEngine)* #removeHistoryDataResourceStatement
+    | COMPACT #compactStatement
     ;
 
 queryClause
@@ -35,8 +37,13 @@ selectClause
    ;
 
 expression
-    : functionName LR_BRACKET path RR_BRACKET asClause?
+    : LR_BRACKET inBracketExpr=expression RR_BRACKET
+    | constant
+    | functionName LR_BRACKET path RR_BRACKET asClause?
     | path asClause?
+    | (PLUS | MINUS) expr=expression
+    | leftExpr=expression (STAR | DIV | MOD) rightExpr=expression
+    | leftExpr=expression (PLUS | MINUS) rightExpr=expression
     ;
 
 functionName
@@ -64,16 +71,11 @@ andExpression
     ;
 
 predicate
-    : (TIME | TIMESTAMP | predicatePath) comparisonOperator constant
-    | constant comparisonOperator (TIME | TIMESTAMP | predicatePath)
-    | predicatePath comparisonOperator predicatePath
-    | predicatePath OPERATOR_LIKE regex=stringLiteral
+    : (KEY | path | functionName LR_BRACKET path RR_BRACKET) comparisonOperator constant
+    | constant comparisonOperator (KEY | path | functionName LR_BRACKET path RR_BRACKET)
+    | path comparisonOperator path
+    | path OPERATOR_LIKE regex=stringLiteral
     | OPERATOR_NOT? LR_BRACKET orExpression RR_BRACKET
-    ;
-
-predicatePath
-    : INTACT LR_BRACKET path RR_BRACKET
-    | path
     ;
 
 withClause
@@ -125,32 +127,65 @@ tagValue
     ;
 
 fromClause
-    : FROM path (COMMA path)*
-    | FROM LR_BRACKET queryClause RR_BRACKET
+    : FROM LR_BRACKET queryClause RR_BRACKET
+    | FROM path joinPart*
     ;
+
+joinPart
+    : COMMA path
+    | CROSS JOIN path
+    | join path (
+        ON orExpression
+        | USING colList
+      )?
+    ;
+
+colList
+    : path (COMMA path)*
+    ;
+
+join
+    : INNER? JOIN
+    | (LEFT | RIGHT | FULL) OUTER? JOIN
+    | NATURAL ((LEFT | RIGHT) OUTER?)? JOIN
+    ;
+
 
 specialClause
     : limitClause
-    | groupByLevelClause
-    | groupByClause limitClause?
-    | groupByTimeClause limitClause?
+    | aggregateWithLevelClause
+    | groupByClause havingClause? orderByClause? limitClause?
+    | downsampleWithLevelClause limitClause?
+    | downsampleClause limitClause?
     | orderByClause limitClause?
     ;
 
-orderByClause
-    : ORDER BY (TIME | TIMESTAMP | path) (DESC | ASC)?
-    ;
-
 groupByClause
-    : GROUP timeInterval BY TIME_WITH_UNIT COMMA LEVEL OPERATOR_EQ INT (COMMA INT)*
+    : GROUP BY path (COMMA path)*
     ;
 
-groupByTimeClause
-    : GROUP timeInterval BY TIME_WITH_UNIT
+havingClause
+    : HAVING orExpression
     ;
 
-groupByLevelClause
-    : GROUP BY LEVEL OPERATOR_EQ INT (COMMA INT)*
+orderByClause
+    : ORDER BY (TIME | TIMESTAMP | KEY | path) (DESC | ASC)?
+    ;
+
+downsampleWithLevelClause
+    : downsampleClause aggregateWithLevelClause
+    ;
+
+downsampleClause
+    : OVER LR_BRACKET RANGE aggLen IN timeInterval (STEP aggLen)? RR_BRACKET
+    ;
+
+aggLen
+    : (TIME_WITH_UNIT | INT)
+    ;
+
+aggregateWithLevelClause
+    : AGG LEVEL OPERATOR_EQ INT (COMMA INT)*
     ;
 
 asClause
@@ -184,7 +219,7 @@ comparisonOperator
     ;
 
 insertColumnsSpec
-    : LR_BRACKET (TIMESTAMP|TIME) (COMMA insertPath)+ RR_BRACKET
+    : LR_BRACKET KEY (COMMA insertPath)+ RR_BRACKET
     ;
 
 insertPath
@@ -265,10 +300,13 @@ keyWords
     | LIMIT
     | OFFSET
     | TIME
+    | KEY
     | SERIES
     | TIMESTAMP
     | GROUP
     | ORDER
+    | HAVING
+    | AGG
     | LEVEL
     | ADD
     | VALUE
@@ -293,7 +331,6 @@ keyWords
     | REPLICA
     | IOTDB
     | INFLUXDB
-    | INTACT
     | DROP
     | REGISTER
     | PYTHON
@@ -310,8 +347,26 @@ keyWords
     | WITH_PRECISE
     | TIME_OFFSET
     | CANCEL
+    | INNER
+    | OUTER
+    | CROSS
+    | NATURAL
+    | LEFT
+    | RIGHT
+    | FULL
+    | JOIN
+    | ON
+    | USING
+    | OVER
+    | RANGE
+    | STEP
+    | REMOVE
+    | HISTORYDATARESOURCE
+    | COMPACT
+    | EXPLAIN
     | STOP
     | MIGRATION
+    | SCALE
     ;
 
 dateFormat
@@ -343,6 +398,10 @@ realLiteral
     : INT DOT (INT | EXPONENT)?
     | DOT  (INT|EXPONENT)
     | EXPONENT
+    ;
+
+removedStorageEngine
+    : LR_BRACKET ip=stringLiteral COMMA port=INT COMMA schemaPrefix=stringLiteral COMMA dataPrefix=stringLiteral RR_BRACKET
     ;
 
 //============================
@@ -408,6 +467,14 @@ ORDER
     : O R D E R
     ;
 
+HAVING
+    : H A V I N G
+    ;
+
+AGG
+    : A G G
+    ;
+
 LEVEL
     : L E V E L
     ;
@@ -438,6 +505,10 @@ NOW
 
 TIME
     : T I M E
+    ;
+
+KEY
+    : K E Y
     ;
 
 TRUE
@@ -522,10 +593,6 @@ DESC
 
 ASC
     : A S C
-    ;
-
-INTACT
-    : I N T A C T
     ;
 
 DROP
@@ -632,6 +699,74 @@ CLOSED
     : C L O S E D
     ;
 
+INNER
+    : I N N E R
+    ;
+
+OUTER
+    : O U T E R
+    ;
+
+CROSS
+    : C R O S S
+    ;
+
+NATURAL
+    : N A T U R A L
+    ;
+
+LEFT
+    : L E F T
+    ;
+
+RIGHT
+    : R I G H T
+    ;
+
+FULL
+    : F U L L
+    ;
+
+JOIN
+    : J O I N
+    ;
+
+ON
+    : O N
+    ;
+
+USING
+    : U S I N G
+    ;
+
+OVER
+    : O V E R
+    ;
+
+RANGE
+    : R A N G E
+    ;
+
+STEP
+    : S T E P
+    ;
+
+REMOVE
+    : R E M O V E
+    ;
+
+HISTORYDATARESOURCE
+    : H I S T O R Y D A T A R E S O U R C E
+    ;
+
+COMPACT
+    : C O M P A C T
+    ;
+
+EXPLAIN
+    : E X P L A I N
+    ;
+
 STOP
     : S T O P
     ;
@@ -736,22 +871,7 @@ DATETIME
     ;
 
 /** Allow unicode rule/token names */
-ID : FIRST_NAME_CHAR NAME_CHAR*;
-
-fragment
-FIRST_NAME_CHAR
-    :   'A'..'Z'
-    |   'a'..'z'
-    |   '0'..'9'
-    |   '_'
-    |   '/'
-    |   '@'
-    |   '#'
-    |   '$'
-    |   '%'
-    |   '&'
-    |   CN_CHAR
-    ;
+ID : NAME_CHAR+;
 
 fragment
 NAME_CHAR
@@ -759,19 +879,17 @@ NAME_CHAR
     |   'a'..'z'
     |   '0'..'9'
     |   '_'
-    |   ':'
-    |   '/'
     |   '@'
     |   '#'
+    |   ':'
     |   '$'
-    |   '%'
-    |   '&'
-    |   '+'
+    |   '{'
+    |   '}'
     |   CN_CHAR
     ;
 
 fragment CN_CHAR
-  : '\u2E80'..'\u9FFF'
+  : '\u2E85'..'\u9FFF'
   ;
 
 DOUBLE_QUOTE_STRING_LITERAL

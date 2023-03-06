@@ -18,22 +18,18 @@
  */
 package cn.edu.tsinghua.iginx.session;
 
+import cn.edu.tsinghua.iginx.constant.GlobalConstant;
 import cn.edu.tsinghua.iginx.thrift.*;
-import cn.edu.tsinghua.iginx.utils.TimeUtils;
-import org.apache.commons.lang3.StringUtils;
+import cn.edu.tsinghua.iginx.utils.FormatUtils;
 
-import java.text.SimpleDateFormat;
 import java.util.*;
 
 import static cn.edu.tsinghua.iginx.utils.ByteUtils.*;
 
 public class SessionExecuteSqlResult {
 
-    public static final String DEFAULT_TIME_FORMAT = "default_time_format";
-
     private SqlType sqlType;
-    private AggregateType aggregateType;
-    private long[] timestamps;
+    private long[] keys;
     private List<String> paths;
     private List<List<Object>> values;
     private List<DataType> dataTypeList;
@@ -98,7 +94,7 @@ public class SessionExecuteSqlResult {
         this.dataTypeList = resp.getDataTypeList();
 
         if (resp.timestamps != null) {
-            this.timestamps = getLongArrayFromByteBuffer(resp.timestamps);
+            this.keys = getLongArrayFromByteBuffer(resp.timestamps);
         }
 
         // parse values
@@ -107,45 +103,13 @@ public class SessionExecuteSqlResult {
         } else {
             this.values = new ArrayList<>();
         }
-
-        sortColumns();
-    }
-
-    private void sortColumns() {
-        Map<String, DataType> typeMap = new TreeMap<>();
-        Map<String, List<Object>> valueMap = new TreeMap<>();
-        for (int i = 0; i < paths.size(); i++) {
-            String path = paths.get(i);
-            typeMap.put(path, dataTypeList.get(i));
-            for (int j = 0; j < values.size(); j++) {
-                List<Object> colValue = valueMap.get(path);
-                if (colValue == null) {
-                    List<Object> list = new ArrayList<>(Collections.singletonList(values.get(j).get(i)));
-                    valueMap.put(path, list);
-                } else {
-                    colValue.add(values.get(j).get(i));
-                }
-            }
-        }
-        this.paths = new ArrayList<>(typeMap.keySet());
-        this.dataTypeList = new ArrayList<>(typeMap.values());
-        List<List<Object>> newValues = new ArrayList<>();
-        for (int i = 0; i < values.size(); i++)
-            newValues.add(new ArrayList<>());
-        for (String key : valueMap.keySet()) {
-            for (int i = 0; i < newValues.size(); i++) {
-                newValues.get(i).add(valueMap.get(key).get(i));
-            }
-        }
-        this.values = newValues;
     }
 
     public List<List<String>> getResultInList(boolean needFormatTime, String timeFormat,
                                               String timePrecision) {
         List<List<String>> result = new ArrayList<>();
         if (isQuery()) {
-            List<Integer> maxSizeList = new ArrayList<>();
-            result = cacheResult(needFormatTime, timeFormat, timePrecision, maxSizeList);
+            result = cacheResult(needFormatTime, timeFormat, timePrecision);
         } else if (sqlType == SqlType.ShowTimeSeries) {
             result.add(new ArrayList<>(Arrays.asList("Path", "DataType")));
             if (paths != null) {
@@ -171,9 +135,6 @@ public class SessionExecuteSqlResult {
 
     public String getResultInString(boolean needFormatTime, String timePrecision) {
         if (isQuery()) {
-            if (aggregateType == AggregateType.LAST) {
-                return buildLastQueryResult(needFormatTime, timePrecision);
-            }
             return buildQueryResult(needFormatTime, timePrecision);
         } else if (sqlType == SqlType.ShowTimeSeries) {
             return buildShowTimeSeriesResult();
@@ -196,36 +157,25 @@ public class SessionExecuteSqlResult {
         StringBuilder builder = new StringBuilder();
         builder.append("ResultSets:").append("\n");
 
-        List<Integer> maxSizeList = new ArrayList<>();
-        List<List<String>> cache = cacheResult(needFormatTime, DEFAULT_TIME_FORMAT, timePrecision, maxSizeList);
+        List<List<String>> cache = cacheResult(needFormatTime, FormatUtils.DEFAULT_TIME_FORMAT, timePrecision);
+        builder.append(FormatUtils.formatResult(cache));
 
-        builder.append(buildBlockLine(maxSizeList));
-        builder.append(buildRow(cache, 0, maxSizeList));
-        builder.append(buildBlockLine(maxSizeList));
-        for (int i = 1; i < cache.size(); i++) {
-            builder.append(buildRow(cache, i, maxSizeList));
-        }
-        builder.append(buildBlockLine(maxSizeList));
-
-        builder.append(buildCount(cache.size() - 1));
-
+        builder.append(FormatUtils.formatCount(cache.size() - 1));
         return builder.toString();
     }
 
     private List<List<String>> cacheResult(boolean needFormatTime, String timeFormat,
-                                           String timePrecision, List<Integer> maxSizeList) {
+                                           String timePrecision) {
         List<List<String>> cache = new ArrayList<>();
         List<String> label = new ArrayList<>();
         int annotationPathIndex = -1;
-        if (timestamps != null) {
-            label.add("Time");
-            maxSizeList.add(4);
+        if (keys != null) {
+            label.add(GlobalConstant.KEY_NAME);
         }
         for (int i = 0; i < paths.size(); i++) {
             String path = paths.get(i);
             if (!path.equals("TITLE.DESCRIPTION")) { // TODO 不展示系统级时间序列
                 label.add(path);
-                maxSizeList.add(path.length());
             } else {
                 annotationPathIndex = i;
             }
@@ -233,40 +183,30 @@ public class SessionExecuteSqlResult {
 
         for (int i = 0; i < values.size(); i++) {
             List<String> rowCache = new ArrayList<>();
-            if (timestamps != null) {
-                if (timestamps[i] == Long.MAX_VALUE - 1 || timestamps[i] == Long.MAX_VALUE - 2) {
+            if (keys != null) {
+                if (keys[i] == Long.MAX_VALUE - 1 || keys[i] == Long.MAX_VALUE - 2) {
                     continue;
                 }
                 String timeValue;
                 if (needFormatTime) {
-                    timeValue = formatTime(timestamps[i], timeFormat, timePrecision);
+                    timeValue = FormatUtils.formatTime(keys[i], timeFormat, timePrecision);
                 } else {
-                    timeValue = String.valueOf(timestamps[i]);
+                    timeValue = String.valueOf(keys[i]);
                 }
                 rowCache.add(timeValue);
-                if (maxSizeList.get(0) < timeValue.length()) {
-                    maxSizeList.set(0, timeValue.length());
-                }
             }
 
             List<Object> rowData = values.get(i);
-            int num = 0;
             boolean isNull = true; // TODO 该行除系统级时间序列之外全部为空
             for (int j = 0; j < rowData.size(); j++) {
                 if (j == annotationPathIndex) {
                     continue;
                 }
-                String rowValue = valueToString(rowData.get(j));
+                String rowValue = FormatUtils.valueToString(rowData.get(j));
                 rowCache.add(rowValue);
                 if (!rowValue.equalsIgnoreCase("null")) {
                     isNull = false;
                 }
-
-                int index = timestamps == null ? num : num + 1;
-                if (maxSizeList.get(index) < rowValue.length()) {
-                    maxSizeList.set(index, rowValue.length());
-                }
-                num++;
             }
             if (!isNull) {
                 cache.add(rowCache);
@@ -276,58 +216,6 @@ public class SessionExecuteSqlResult {
         cache.add(0, label);
 
         return cache;
-    }
-
-    private String buildBlockLine(List<Integer> maxSizeList) {
-        StringBuilder blockLine = new StringBuilder();
-        for (Integer integer : maxSizeList) {
-            blockLine.append("+").append(StringUtils.repeat("-", integer));
-        }
-        blockLine.append("+").append("\n");
-        return blockLine.toString();
-    }
-
-    private String buildRow(List<List<String>> cache, int rowIdx, List<Integer> maxSizeList) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("|");
-        int maxSize;
-        String rowValue;
-        for (int i = 0; i < maxSizeList.size(); i++) {
-            maxSize = maxSizeList.get(i);
-            rowValue = cache.get(rowIdx).get(i);
-            builder.append(String.format("%" + maxSize + "s|", rowValue));
-        }
-        builder.append("\n");
-        return builder.toString();
-    }
-
-    public String buildCount(int count) {
-        if (count <= 0) {
-            return "Empty set.\n";
-        } else {
-            return "Total line number = " + count + "\n";
-        }
-    }
-
-    private String buildLastQueryResult(boolean needFormatTime, String timePrecision) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("ResultSets:").append("\n");
-        int num = paths == null ? 0 : paths.size();
-        if (values != null && !values.isEmpty()) {
-            List<List<String>> cache = new ArrayList<>();
-            cache.add(new ArrayList<>(Arrays.asList("Time", "Path", "value")));
-            for (int i = 0; i < paths.size(); i++) {
-                cache.add(new ArrayList<>(Arrays.asList(
-                    needFormatTime ? formatTime(timestamps[i], DEFAULT_TIME_FORMAT, timePrecision) : String.valueOf(timestamps[i]),
-                    paths.get(i),
-                    valueToString(values.get(0).get(i))
-                )));
-            }
-
-            buildFromStringList(builder, cache);
-        }
-        builder.append(buildCount(num));
-        return builder.toString();
     }
 
     private String buildShowTimeSeriesResult() {
@@ -343,10 +231,9 @@ public class SessionExecuteSqlResult {
                     num++;
                 }
             }
-
-            buildFromStringList(builder, cache);
+            builder.append(FormatUtils.formatResult(cache));
         }
-        builder.append(buildCount(num));
+        builder.append(FormatUtils.formatCount(num));
         return builder.toString();
     }
 
@@ -357,46 +244,45 @@ public class SessionExecuteSqlResult {
             builder.append("IginX infos:").append("\n");
             List<List<String>> cache = new ArrayList<>();
             cache.add(new ArrayList<>(Arrays.asList("ID", "IP", "PORT")));
-            for (int i = 0; i < iginxInfos.size(); i++) {
-                IginxInfo info = iginxInfos.get(i);
+            for (IginxInfo info : iginxInfos) {
                 cache.add(new ArrayList<>(Arrays.asList(
                     String.valueOf(info.getId()),
                     info.getIp(),
                     String.valueOf(info.getPort())
                 )));
             }
-            buildFromStringList(builder, cache);
+            builder.append(FormatUtils.formatResult(cache));
         }
 
         if (storageEngineInfos != null && !storageEngineInfos.isEmpty()) {
             builder.append("Storage engine infos:").append("\n");
             List<List<String>> cache = new ArrayList<>();
-            cache.add(new ArrayList<>(Arrays.asList("ID", "IP", "PORT", "TYPE")));
-            for (int i = 0; i < storageEngineInfos.size(); i++) {
-                StorageEngineInfo info = storageEngineInfos.get(i);
+            cache.add(new ArrayList<>(Arrays.asList("ID", "IP", "PORT", "TYPE", "SCHEMA_PREFIX", "DATAPREFIX")));
+            for (StorageEngineInfo info : storageEngineInfos) {
                 cache.add(new ArrayList<>(Arrays.asList(
                     String.valueOf(info.getId()),
                     info.getIp(),
                     String.valueOf(info.getPort()),
-                    info.getType()
+                    info.getType(),
+                    info.getSchemaPrefix(),
+                    info.getDataPrefix()
                 )));
             }
-            buildFromStringList(builder, cache);
+            builder.append(FormatUtils.formatResult(cache));
         }
 
         if (metaStorageInfos != null && !metaStorageInfos.isEmpty()) {
             builder.append("Meta Storage infos:").append("\n");
             List<List<String>> cache = new ArrayList<>();
             cache.add(new ArrayList<>(Arrays.asList("IP", "PORT", "TYPE")));
-            for (int i = 0; i < metaStorageInfos.size(); i++) {
-                MetaStorageInfo info = metaStorageInfos.get(i);
+            for (MetaStorageInfo info : metaStorageInfos) {
                 cache.add(new ArrayList<>(Arrays.asList(
                     info.getIp(),
                     String.valueOf(info.getPort()),
                     info.getType()
                 )));
             }
-            buildFromStringList(builder, cache);
+            builder.append(FormatUtils.formatResult(cache));
         }
 
         if (localMetaStorageInfo != null) {
@@ -404,7 +290,7 @@ public class SessionExecuteSqlResult {
             List<List<String>> cache = new ArrayList<>();
             cache.add(new ArrayList<>(Collections.singletonList("PATH")));
             cache.add(new ArrayList<>(Collections.singletonList(localMetaStorageInfo.getPath())));
-            buildFromStringList(builder, cache);
+            builder.append(FormatUtils.formatResult(cache));
         }
 
         return builder.toString();
@@ -417,8 +303,7 @@ public class SessionExecuteSqlResult {
             builder.append("Register task infos:").append("\n");
             List<List<String>> cache = new ArrayList<>();
             cache.add(new ArrayList<>(Arrays.asList("NAME", "CLASS_NAME", "FILE_NAME", "IP", "UDF_TYPE")));
-            for (int i = 0; i < registerTaskInfos.size(); i++) {
-                RegisterTaskInfo info = registerTaskInfos.get(i);
+            for (RegisterTaskInfo info : registerTaskInfos) {
                 cache.add(new ArrayList<>(Arrays.asList(
                     info.getName(),
                     info.getClassName(),
@@ -427,7 +312,7 @@ public class SessionExecuteSqlResult {
                     info.getType().toString()
                 )));
             }
-            buildFromStringList(builder, cache);
+            builder.append(FormatUtils.formatResult(cache));
         }
 
         return builder.toString();
@@ -443,51 +328,10 @@ public class SessionExecuteSqlResult {
             for (long jobId : jobIdList) {
                 cache.add(new ArrayList<>(Collections.singletonList(String.valueOf(jobId))));
             }
-            buildFromStringList(builder, cache);
+            builder.append(FormatUtils.formatResult(cache));
         }
 
         return builder.toString();
-    }
-
-    private void buildFromStringList(StringBuilder builder, List<List<String>> cache) {
-        List<Integer> maxSizeList = new ArrayList<>();
-        if (!cache.isEmpty()) {
-            int colCount = cache.get(0).size();
-            for (int i = 0; i < colCount; i++) {
-                maxSizeList.add(0);
-            }
-            for (List<String> row : cache) {
-                for (int i = 0; i < colCount; i++) {
-                    maxSizeList.set(i, Math.max(row.get(i).length(), maxSizeList.get(i)));
-                }
-            }
-            builder.append(buildBlockLine(maxSizeList));
-            builder.append(buildRow(cache, 0, maxSizeList));
-            builder.append(buildBlockLine(maxSizeList));
-            for (int i = 1; i < cache.size(); i++) {
-                builder.append(buildRow(cache, i, maxSizeList));
-            }
-            builder.append(buildBlockLine(maxSizeList));
-        }
-    }
-
-    private String valueToString(Object value) {
-        String ret;
-        if (value instanceof byte[]) {
-            ret = new String((byte[]) value);
-        } else {
-            ret = String.valueOf(value);
-        }
-        return ret;
-    }
-
-    private String formatTime(long timestamp, String timeFormat, String timePrecision) {
-        long timeInMs = TimeUtils.getTimeInMs(timestamp, timePrecision);
-        if (timeFormat.equals(DEFAULT_TIME_FORMAT)) {
-            return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS").format(timeInMs);
-        } else {
-            return new SimpleDateFormat(timeFormat).format(timeInMs);
-        }
     }
 
     public boolean isQuery() {
@@ -502,20 +346,12 @@ public class SessionExecuteSqlResult {
         this.sqlType = sqlType;
     }
 
-    public AggregateType getAggregateType() {
-        return aggregateType;
+    public long[] getKeys() {
+        return keys;
     }
 
-    public void setAggregateType(AggregateType aggregateType) {
-        this.aggregateType = aggregateType;
-    }
-
-    public long[] getTimestamps() {
-        return timestamps;
-    }
-
-    public void setTimestamps(long[] timestamps) {
-        this.timestamps = timestamps;
+    public void setKeys(long[] keys) {
+        this.keys = keys;
     }
 
     public List<String> getPaths() {
@@ -560,5 +396,9 @@ public class SessionExecuteSqlResult {
 
     public JobState getJobState() {
         return jobState;
+    }
+
+    public List<RegisterTaskInfo> getRegisterTaskInfos() {
+        return registerTaskInfos;
     }
 }

@@ -35,13 +35,13 @@ import cn.edu.tsinghua.iginx.engine.shared.data.write.RowDataView;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Insert;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Migration;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Operator;
-import cn.edu.tsinghua.iginx.engine.shared.operator.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Project;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Select;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.AndFilter;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Filter;
+import cn.edu.tsinghua.iginx.engine.shared.operator.filter.KeyFilter;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Op;
-import cn.edu.tsinghua.iginx.engine.shared.operator.filter.TimeFilter;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.source.FragmentSource;
 import cn.edu.tsinghua.iginx.engine.shared.source.OperatorSource;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
@@ -50,7 +50,6 @@ import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
 import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
 import cn.edu.tsinghua.iginx.thrift.DataType;
-import cn.edu.tsinghua.iginx.transform.pojo.Task;
 import cn.edu.tsinghua.iginx.utils.Bitmap;
 import cn.edu.tsinghua.iginx.utils.ByteUtils;
 
@@ -110,25 +109,25 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 List<String> paths = migration.getPaths();
 
                 // 查询分区数据
-                List<Operator> projectOperators = new ArrayList<>();
+                List<Operator> operators = new ArrayList<>();
                 Project project = new Project(new FragmentSource(toMigrateFragment), paths, null);
-                projectOperators.add(project);
-                StoragePhysicalTask projectPhysicalTask = new StoragePhysicalTask(projectOperators);
-                projectPhysicalTask.setMigration(true);
+                operators.add(project);
 
-                List<Operator> selectOperators = new ArrayList<>();
                 List<Filter> selectTimeFilters = new ArrayList<>();
-                selectTimeFilters.add(new TimeFilter(Op.GE, timeInterval.getStartTime()));
-                selectTimeFilters.add(new TimeFilter(Op.L, timeInterval.getEndTime()));
-                selectOperators
-                    .add(new Select(new OperatorSource(project), new AndFilter(selectTimeFilters), null));
-                MemoryPhysicalTask selectPhysicalTask = new UnaryMemoryPhysicalTask(selectOperators,
-                    projectPhysicalTask);
-                projectPhysicalTask.setFollowerTask(selectPhysicalTask);
+                selectTimeFilters.add(new KeyFilter(Op.GE, timeInterval.getStartTime()));
+                selectTimeFilters.add(new KeyFilter(Op.L, timeInterval.getEndTime()));
+                Select select = new Select(new OperatorSource(project), new AndFilter(selectTimeFilters), null);
+                operators.add(select);
+                StoragePhysicalTask physicalTask = new StoragePhysicalTask(operators);
+                physicalTask.setMigration(true);
 
-                storageTaskExecutor.commit(projectPhysicalTask);
+                if (migration.getFragmentMeta().getMasterStorageUnitId() != null) {
+                    storageTaskExecutor.commitWithTargetStorageUnitId(physicalTask, migration.getFragmentMeta().getMasterStorageUnitId());
+                } else {
+                    storageTaskExecutor.commit(physicalTask);
+                }
 
-                TaskExecuteResult selectResult = selectPhysicalTask.getResult();
+                TaskExecuteResult selectResult = physicalTask.getResult();
                 RowStream selectRowStream = selectResult.getRowStream();
 
                 List<String> selectResultPaths = new ArrayList<>();
@@ -142,7 +141,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 List<ByteBuffer> valuesList = new ArrayList<>();
                 List<Bitmap> bitmapList = new ArrayList<>();
 
-                boolean hasTimestamp = selectRowStream.getHeader().hasTimestamp();
+                boolean hasTimestamp = selectRowStream.getHeader().hasKey();
                 while (selectRowStream.hasNext()) {
                     Row row = selectRowStream.next();
                     Object[] rowValues = row.getValues();
@@ -155,7 +154,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                     }
                     bitmapList.add(bitmap);
                     if (hasTimestamp) {
-                        timestampList.add(row.getTimestamp());
+                        timestampList.add(row.getKey());
                     }
 
                     // 按行批量插入数据

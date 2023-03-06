@@ -23,7 +23,6 @@ import cn.edu.tsinghua.iginx.rest.RestUtils;
 import cn.edu.tsinghua.iginx.rest.bean.QueryResultDataset;
 import cn.edu.tsinghua.iginx.session.SessionQueryDataSet;
 import cn.edu.tsinghua.iginx.thrift.DataType;
-import cn.edu.tsinghua.iginx.thrift.AggregateType;
 
 import java.util.List;
 import java.util.Map;
@@ -40,7 +39,7 @@ public class QueryAggregatorFilter extends QueryAggregator {
             SessionQueryDataSet sessionQueryDataSet = session.queryData(paths, startTimestamp, endTimestamp, tagList);
             queryResultDataset.setPaths(getPathsFromSessionQueryDataSet(sessionQueryDataSet));
             DataType type = RestUtils.checkType(sessionQueryDataSet);
-            int n = sessionQueryDataSet.getTimestamps().length;
+            int n = sessionQueryDataSet.getKeys().length;
             int m = sessionQueryDataSet.getPaths().size();
             int datapoints = 0;
             switch (type) {
@@ -56,7 +55,7 @@ public class QueryAggregatorFilter extends QueryAggregator {
                             }
                         }
                         if (now != null) {
-                            queryResultDataset.add(sessionQueryDataSet.getTimestamps()[i], now);
+                            queryResultDataset.add(sessionQueryDataSet.getKeys()[i], now);
                         }
                     }
                     queryResultDataset.setSampleSize(datapoints);
@@ -73,7 +72,7 @@ public class QueryAggregatorFilter extends QueryAggregator {
                             }
                         }
                         if (nowd != null) {
-                            queryResultDataset.add(sessionQueryDataSet.getTimestamps()[i], nowd);
+                            queryResultDataset.add(sessionQueryDataSet.getKeys()[i], nowd);
                         }
                     }
                     queryResultDataset.setSampleSize(datapoints);

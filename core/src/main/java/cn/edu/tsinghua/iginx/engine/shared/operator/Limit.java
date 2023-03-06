@@ -18,6 +18,7 @@
  */
 package cn.edu.tsinghua.iginx.engine.shared.operator;
 
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.source.Source;
 
 public class Limit extends AbstractUnaryOperator {
@@ -46,5 +47,10 @@ public class Limit extends AbstractUnaryOperator {
     @Override
     public Operator copy() {
         return new Limit(getSource().copy(), limit, offset);
+    }
+
+    @Override
+    public String getInfo() {
+        return "Limit: " + limit + ", Offset: " + offset;
     }
 }

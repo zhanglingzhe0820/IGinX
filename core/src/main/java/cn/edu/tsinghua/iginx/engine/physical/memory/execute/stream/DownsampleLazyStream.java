@@ -86,8 +86,12 @@ public class DownsampleLazyStream extends UnaryLazyStream {
         }
         Row row = null;
         long timestamp = 0;
-        long bias = downsample.getTimeRange().getBeginTime();
+        long bias = downsample.getTimeRange().getActualBeginTime();
+        long endTime = downsample.getTimeRange().getActualEndTime();
         long precision = downsample.getPrecision();
+        long slideDistance = downsample.getSlideDistance();
+        // startTime + (n - 1) * slideDistance + precision - 1 >= endTime
+        int n = (int) (Math.ceil((double)(endTime - bias - precision + 1) / slideDistance) + 1);
         while(row == null && wrapper.hasNext()) {
             timestamp = wrapper.nextTimestamp() - (wrapper.nextTimestamp() - bias) % precision;
             List<Row> rows = new ArrayList<>();
@@ -101,7 +105,7 @@ public class DownsampleLazyStream extends UnaryLazyStream {
                 throw new PhysicalTaskExecuteFailureException("encounter error when execute set mapping function " + function.getIdentifier() + ".", e);
             }
         }
-        return row == null ? null : new Row(new Header(Field.TIME, row.getHeader().getFields()), timestamp, row.getValues());
+        return row == null ? null : new Row(new Header(Field.KEY, row.getHeader().getFields()), timestamp, row.getValues());
     }
 
     @Override

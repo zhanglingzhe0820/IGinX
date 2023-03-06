@@ -10,7 +10,6 @@ import cn.edu.tsinghua.iginx.engine.shared.data.read.Field;
 import cn.edu.tsinghua.iginx.engine.shared.data.read.Header;
 import cn.edu.tsinghua.iginx.engine.shared.data.read.Row;
 import cn.edu.tsinghua.iginx.engine.shared.data.read.RowStream;
-import cn.edu.tsinghua.iginx.engine.shared.operator.Project;
 import cn.edu.tsinghua.iginx.engine.shared.operator.tag.TagFilter;
 import cn.edu.tsinghua.iginx.parquet.tools.TagKVUtils;
 import cn.edu.tsinghua.iginx.thrift.DataType;
@@ -23,7 +22,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,18 +39,17 @@ public class ParquetQueryRowStream implements RowStream {
 
     private boolean hasNextCache = false;
 
-    private Map<Field, String> physicalNameCache = new HashMap<>();
+    private final Map<Field, String> physicalNameCache = new HashMap<>();
 
-    public ParquetQueryRowStream(ResultSet rs, Project project) {
+    public ParquetQueryRowStream(ResultSet rs, TagFilter tagFilter) {
         this.rs = rs;
 
         if (rs == null) {
-            this.header = new Header(Field.TIME, Collections.emptyList());
+            this.header = new Header(Field.KEY, Collections.emptyList());
             return;
         }
 
-        boolean filterByTags = project != null && project.getTagFilter() != null;
-        TagFilter tagFilter = project == null ? null : project.getTagFilter();
+        boolean filterByTags = tagFilter != null;
 
         Field time = null;
         List<Field> fields = new ArrayList<>();
@@ -61,13 +58,14 @@ public class ParquetQueryRowStream implements RowStream {
             for (int i = 1; i <= rsMetaData.getColumnCount(); i++) {  // start from index 1
                 String pathName = rsMetaData.getColumnName(i).replaceAll(PARQUET_SEPARATOR, IGINX_SEPARATOR);
                 if (i == 1 && pathName.equals(COLUMN_TIME)) {
-                    time = Field.TIME;
+                    time = Field.KEY;
                     continue;
                 }
 
                 Pair<String, Map<String, String>> pair = TagKVUtils.splitFullName(pathName);
                 DataType type = fromParquetDataType(rsMetaData.getColumnTypeName(i));
-                Field field = new Field(pair.getK(), type, pair.getV());
+
+                Field field  = new Field(pair.getK(), type, pair.getV());
 
                 if (filterByTags && !TagKVUtils.match(pair.v, tagFilter)) {
                     continue;
@@ -81,7 +79,7 @@ public class ParquetQueryRowStream implements RowStream {
         if (time == null) {
             this.header = new Header(fields);
         } else {
-            this.header = new Header(Field.TIME, fields);
+            this.header = new Header(Field.KEY, fields);
         }
     }
 
@@ -157,7 +155,8 @@ public class ParquetQueryRowStream implements RowStream {
         if (physicalNameCache.containsKey(field)) {
             return physicalNameCache.get(field);
         } else {
-            String path = TagKVUtils.toFullName(field.getName(), field.getTags());
+            String name = field.getName();
+            String path = TagKVUtils.toFullName(name, field.getTags());
             path = path.replaceAll(IGINX_SEPARATOR, PARQUET_SEPARATOR);
             physicalNameCache.put(field, path);
             return path;

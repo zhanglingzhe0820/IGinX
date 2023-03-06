@@ -36,17 +36,14 @@ import cn.edu.tsinghua.iginx.engine.shared.data.write.RowDataView;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Delete;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Insert;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Operator;
-import cn.edu.tsinghua.iginx.engine.shared.operator.OperatorType;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Project;
 import cn.edu.tsinghua.iginx.engine.shared.operator.Select;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.AndFilter;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Filter;
 import cn.edu.tsinghua.iginx.engine.shared.operator.filter.Op;
-import cn.edu.tsinghua.iginx.engine.shared.operator.filter.TimeFilter;
-import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.StorageEngineMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.engine.shared.operator.filter.KeyFilter;
+import cn.edu.tsinghua.iginx.metadata.entity.*;
 import cn.edu.tsinghua.iginx.postgresql.entity.PostgreSQLQueryRowStream;
 import cn.edu.tsinghua.iginx.postgresql.tools.DataTypeTransformer;
 import cn.edu.tsinghua.iginx.postgresql.tools.FilterTransformer;
@@ -74,7 +71,7 @@ public class PostgreSQLStorage implements IStorage {
 
   private static final int BATCH_SIZE = 10000;
 
-  private static final String STORAGE_ENGINE = "timescaledb";
+  private static final String STORAGE_ENGINE = "postgresql";
 
   private static final String USERNAME = "username";
 
@@ -164,8 +161,8 @@ public class PostgreSQLStorage implements IStorage {
         filter = ((Select) operators.get(1)).getFilter();
       } else {
         filter = new AndFilter(Arrays
-            .asList(new TimeFilter(Op.GE, fragment.getTimeInterval().getStartTime()),
-                new TimeFilter(Op.L, fragment.getTimeInterval().getEndTime())));
+            .asList(new KeyFilter(Op.GE, fragment.getTimeInterval().getStartTime()),
+                new KeyFilter(Op.L, fragment.getTimeInterval().getEndTime())));
       }
       return executeProjectTask(project, filter);
     } else if (op.getType() == OperatorType.Insert) {
@@ -188,6 +185,9 @@ public class PostgreSQLStorage implements IStorage {
       while (tableSet.next()) {
         String tableName = tableSet.getString(3);//获取表名称
         ResultSet columnSet = databaseMetaData.getColumns(null, "%", tableName, "%");
+        if (tableName.startsWith("unit")) {
+          tableName = tableName.substring(tableName.indexOf(POSTGRESQL_SEPARATOR) + 1);
+        }
         while (columnSet.next()) {
           String columnName = columnSet.getString("COLUMN_NAME");//获取列名称
           String typeName = columnSet.getString("TYPE_NAME");//列字段类型
@@ -204,7 +204,7 @@ public class PostgreSQLStorage implements IStorage {
   }
 
   @Override
-  public Pair<TimeSeriesInterval, TimeInterval> getBoundaryOfStorage() throws PhysicalException {
+  public Pair<TimeSeriesRange, TimeInterval> getBoundaryOfStorage(String prefix) throws PhysicalException {
     long minTime = Long.MAX_VALUE, maxTime = 0;
     List<String> paths = new ArrayList<>();
     try {
@@ -382,7 +382,7 @@ public class PostgreSQLStorage implements IStorage {
             Map<String, String> tags = data.getTags(i);
             createTimeSeriesIfNotExists(table, field, tags, dataType);
 
-            long time = data.getTimestamp(i) / 1000; // timescaledb存10位时间戳，java为13位时间戳
+            long time = data.getKey(i) / 1000; // timescaledb存10位时间戳，java为13位时间戳
             String value;
             if (data.getDataType(j) == DataType.BINARY) {
               value = "'" + new String((byte[]) data.getValue(i, index), StandardCharsets.UTF_8)
@@ -436,7 +436,7 @@ public class PostgreSQLStorage implements IStorage {
         int index = 0;
         for (int j = 0; j < data.getTimeSize(); j++) {
           if (bitmapView.get(j)) {
-            long time = data.getTimestamp(j) / 1000; // timescaledb存10位时间戳，java为13位时间戳
+            long time = data.getKey(j) / 1000; // timescaledb存10位时间戳，java为13位时间戳
             String value;
             if (data.getDataType(i) == DataType.BINARY) {
               value = "'" + new String((byte[]) data.getValue(i, index), StandardCharsets.UTF_8)

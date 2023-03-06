@@ -18,10 +18,7 @@
  */
 package cn.edu.tsinghua.iginx.influxdb.query.entity;
 
-import cn.edu.tsinghua.iginx.utils.Pair;
-
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 
 public class InfluxDBSchema {
@@ -67,7 +64,7 @@ public class InfluxDBSchema {
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < parts.length; i++) {
             if (i != 0) {
-                builder.append("\\.");
+                builder.append(".");
             }
             if (parts[i].equals("*")) {
                 builder.append(".+");

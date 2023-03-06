@@ -1,6 +1,7 @@
 package cn.edu.tsinghua.iginx.engine.shared.operator;
 
 import cn.edu.tsinghua.iginx.engine.shared.data.write.DataView;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.source.FragmentSource;
 
 import java.util.Random;
@@ -25,5 +26,10 @@ public class Insert extends AbstractUnaryOperator {
     public Operator copy() {
         // data should not be copied in memory.
         return new Insert((FragmentSource) getSource().copy(), data);
+    }
+
+    @Override
+    public String getInfo() {
+        return "";
     }
 }

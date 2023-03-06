@@ -23,7 +23,6 @@ import cn.edu.tsinghua.iginx.rest.RestUtils;
 import cn.edu.tsinghua.iginx.rest.bean.QueryResultDataset;
 import cn.edu.tsinghua.iginx.session.SessionQueryDataSet;
 import cn.edu.tsinghua.iginx.thrift.DataType;
-import cn.edu.tsinghua.iginx.thrift.AggregateType;
 
 import java.util.List;
 import java.util.Map;
@@ -40,7 +39,7 @@ public class QueryAggregatorDiv extends QueryAggregator {
             SessionQueryDataSet sessionQueryDataSet = session.queryData(paths, startTimestamp, endTimestamp, tagList);
             queryResultDataset.setPaths(getPathsFromSessionQueryDataSet(sessionQueryDataSet));
             DataType type = RestUtils.checkType(sessionQueryDataSet);
-            int n = sessionQueryDataSet.getTimestamps().length;
+            int n = sessionQueryDataSet.getKeys().length;
             int m = sessionQueryDataSet.getPaths().size();
             int datapoints = 0;
             switch (type) {
@@ -56,7 +55,7 @@ public class QueryAggregatorDiv extends QueryAggregator {
                                 datapoints += 1;
                             }
                         }
-                        queryResultDataset.add(sessionQueryDataSet.getTimestamps()[i], nowd / getDivisor());
+                        queryResultDataset.add(sessionQueryDataSet.getKeys()[i], nowd / getDivisor());
                         nowd = null;
                     }
                     queryResultDataset.setSampleSize(datapoints);

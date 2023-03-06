@@ -25,6 +25,7 @@ public class StatementBuilder {
         typeMap.put(StatementType.INSERT_FROM_SELECT, SqlType.Insert);
         typeMap.put(StatementType.ADD_STORAGE_ENGINE, SqlType.AddStorageEngines);
         typeMap.put(StatementType.SCALE_IN_STORAGE_ENGINE, SqlType.ScaleInStorageEngines);
+        typeMap.put(StatementType.REMOVE_HISTORY_DATA_RESOURCE, SqlType.RemoveHistoryDataResource);
         typeMap.put(StatementType.SHOW_REPLICATION, SqlType.GetReplicaNum);
         typeMap.put(StatementType.COUNT_POINTS, SqlType.CountPoints);
         typeMap.put(StatementType.CLEAR_DATA, SqlType.ClearData);
@@ -39,6 +40,7 @@ public class StatementBuilder {
         typeMap.put(StatementType.CANCEL_JOB, SqlType.CancelJob);
         typeMap.put(StatementType.SHOW_ELIGIBLE_JOB, SqlType.ShowEligibleJob);
         typeMap.put(StatementType.STOP_MIGRATION, SqlType.StopMigration);
+        typeMap.put(StatementType.COMPACT, SqlType.Compact);
     }
 
     private static final StatementBuilder instance = new StatementBuilder();

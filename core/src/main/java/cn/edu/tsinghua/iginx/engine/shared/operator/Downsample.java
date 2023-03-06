@@ -21,20 +21,26 @@ package cn.edu.tsinghua.iginx.engine.shared.operator;
 import cn.edu.tsinghua.iginx.engine.shared.TimeRange;
 import cn.edu.tsinghua.iginx.engine.shared.function.FunctionCall;
 import cn.edu.tsinghua.iginx.engine.shared.function.MappingType;
+import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.engine.shared.source.Source;
 
 public class Downsample extends AbstractUnaryOperator {
 
     private final long precision;
+    
+    private final long slideDistance;
 
     private final FunctionCall functionCall;
 
     private final TimeRange timeRange;
-
-    public Downsample(Source source, long precision, FunctionCall functionCall, TimeRange timeRange) {
+    
+    public Downsample(Source source, long precision, long slideDistance, FunctionCall functionCall, TimeRange timeRange) {
         super(OperatorType.Downsample, source);
         if (precision <= 0) {
             throw new IllegalArgumentException("precision should be greater than zero");
+        }
+        if (slideDistance <= 0) {
+            throw new IllegalArgumentException("slide distance should be greater than zero");
         }
         if (functionCall == null || functionCall.getFunction() == null) {
             throw new IllegalArgumentException("function shouldn't be null");
@@ -46,6 +52,7 @@ public class Downsample extends AbstractUnaryOperator {
             throw new IllegalArgumentException("timeRange shouldn't be null");
         }
         this.precision = precision;
+        this.slideDistance = slideDistance;
         this.functionCall = functionCall;
         this.timeRange = timeRange;
     }
@@ -53,7 +60,11 @@ public class Downsample extends AbstractUnaryOperator {
     public long getPrecision() {
         return precision;
     }
-
+    
+    public long getSlideDistance() {
+        return slideDistance;
+    }
+    
     public FunctionCall getFunctionCall() {
         return functionCall;
     }
@@ -64,6 +75,14 @@ public class Downsample extends AbstractUnaryOperator {
 
     @Override
     public Operator copy() {
-        return new Downsample(getSource().copy(), precision, functionCall.copy(), timeRange.copy());
+        return new Downsample(getSource().copy(), precision, slideDistance, functionCall.copy(), timeRange.copy());
+    }
+
+    @Override
+    public String getInfo() {
+        return "Precision: " +precision+
+            ", SlideDistance: " +slideDistance+
+            ", TimeRange: " + timeRange.toString() +
+            ", Func: " + functionCall.toString();
     }
 }

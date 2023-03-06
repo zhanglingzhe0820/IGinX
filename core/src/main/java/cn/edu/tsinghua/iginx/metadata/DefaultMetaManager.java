@@ -34,7 +34,6 @@ import cn.edu.tsinghua.iginx.metadata.hook.StorageEngineChangeHook;
 import cn.edu.tsinghua.iginx.metadata.hook.StorageUnitHook;
 import cn.edu.tsinghua.iginx.metadata.storage.IMetaStorage;
 import cn.edu.tsinghua.iginx.metadata.storage.etcd.ETCDMetaStorage;
-import cn.edu.tsinghua.iginx.metadata.storage.file.FileMetaStorage;
 import cn.edu.tsinghua.iginx.metadata.storage.zk.ZooKeeperMetaStorage;
 import cn.edu.tsinghua.iginx.metadata.utils.ReshardStatus;
 import cn.edu.tsinghua.iginx.migration.recover.MigrationExecuteTask;
@@ -62,6 +61,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static cn.edu.tsinghua.iginx.metadata.utils.ReshardStatus.*;
+import static cn.edu.tsinghua.iginx.metadata.utils.ReshardStatus.EXECUTING;
+import static cn.edu.tsinghua.iginx.metadata.utils.ReshardStatus.NON_RESHARDING;
 
 public class DefaultMetaManager implements IMetaManager {
 
@@ -97,23 +98,19 @@ public class DefaultMetaManager implements IMetaManager {
                 storage = ZooKeeperMetaStorage.getInstance();
                 break;
             case Constants.FILE_META:
-                logger.info("use file as meta storage");
-                storage = FileMetaStorage.getInstance();
+                logger.error("file as meta storage has depreciated.");
+                storage = null;
+                System.exit(-1);
                 break;
             case Constants.ETCD_META:
                 logger.info("use etcd as meta storage");
                 storage = ETCDMetaStorage.getInstance();
                 break;
-            case "":
-                //without configuration, file storage should be the safe choice
-                logger.info("doesn't specify meta storage, use file as meta storage.");
-                storage = FileMetaStorage.getInstance();
-                break;
             default:
                 //without configuration, file storage should be the safe choice
-                logger.info("unknown meta storage, use file as meta storage.");
-                storage = FileMetaStorage.getInstance();
-                break;
+                logger.info("unknown meta storage " + ConfigDescriptor.getInstance().getConfig().getMetaStorage());
+                storage = null;
+                System.exit(-1);
         }
 
         storageEngineChangeHooks = Collections.synchronizedList(new ArrayList<>());
@@ -151,6 +148,81 @@ public class DefaultMetaManager implements IMetaManager {
         return INSTANCE;
     }
 
+    private void initMaxActiveEndTimeStatistics() throws MetaStorageException {
+        storage.registerMaxActiveEndTimeStatisticsChangeHook((endTime) -> {
+            if (endTime <= 0L) {
+                return;
+            }
+            updateMaxActiveEndTime(endTime);
+            int updatedCounter = maxActiveEndTimeStatisticsCounter.incrementAndGet();
+            if (isProposer) {
+                logger.info("iginx node {}(proposer) increment max active end time statistics counter {}",
+                    this.id, updatedCounter);
+            } else {
+                logger.info("iginx node {} increment max active end time statistics counter {}", this.id,
+                    updatedCounter);
+            }
+        });
+    }
+
+    private void initReshardStatus() throws MetaStorageException {
+        storage.registerReshardStatusHook(status -> {
+            try {
+                reshardStatus = status;
+                if (reshardStatus.equals(EXECUTING)) {
+                    storage.lockMaxActiveEndTimeStatistics();
+                    storage.addOrUpdateMaxActiveEndTimeStatistics(maxActiveEndTime.get());
+                    storage.releaseMaxActiveEndTimeStatistics();
+
+                    storage.lockReshardCounter();
+                    storage.incrementReshardCounter();
+                    storage.releaseReshardCounter();
+                }
+                if (reshardStatus.equals(NON_RESHARDING)) {
+                    if (isProposer) {
+                        logger.info("iginx node {}(proposer) finish to reshard", id);
+                    } else {
+                        logger.info("iginx node {} finish to reshard", id);
+                    }
+
+                    isProposer = false;
+                    maxActiveEndTimeStatisticsCounter.set(0);
+                }
+            } catch (MetaStorageException e) {
+                logger.error("encounter error when switching reshard status: ", e);
+            }
+        });
+        storage.lockReshardStatus();
+        storage.removeReshardStatus();
+        storage.releaseReshardStatus();
+    }
+
+    private void initReshardCounter() throws MetaStorageException {
+        storage.registerReshardCounterChangeHook(counter -> {
+            try {
+                if (counter <= 0) {
+                    return;
+                }
+                if (isProposer && counter == getIginxList().size() - 1) {
+                    storage.lockReshardCounter();
+                    storage.resetReshardCounter();
+                    storage.releaseReshardCounter();
+
+                    if (reshardStatus == EXECUTING) {
+                        storage.lockReshardStatus();
+                        storage.updateReshardStatus(NON_RESHARDING);
+                        storage.releaseReshardStatus();
+                    }
+                }
+            } catch (MetaStorageException e) {
+                logger.error("encounter error when updating reshard counter: ", e);
+            }
+        });
+        storage.lockReshardCounter();
+        storage.removeReshardCounter();
+        storage.releaseReshardCounter();
+    }
+
     private void initIginx() throws MetaStorageException {
         storage.registerIginxChangeHook((id, iginx) -> {
             if (iginx == null) {
@@ -163,7 +235,7 @@ public class DefaultMetaManager implements IMetaManager {
             cache.addIginx(iginx);
         }
         IginxMeta iginx = new IginxMeta(0L, ConfigDescriptor.getInstance().getConfig().getIp(),
-            ConfigDescriptor.getInstance().getConfig().getPort(), null);
+                ConfigDescriptor.getInstance().getConfig().getPort(), null);
         id = storage.registerIginx(iginx);
         SnowFlakeUtils.init(id);
     }
@@ -174,7 +246,7 @@ public class DefaultMetaManager implements IMetaManager {
                 if (storageEngine.isHasData()) {
                     StorageUnitMeta dummyStorageUnit = storageEngine.getDummyStorageUnit();
                     dummyStorageUnit.setStorageEngineId(id);
-                    dummyStorageUnit.setId(String.format(Constants.DUMMY + "%04d", (int) id));
+                    dummyStorageUnit.setId(StorageUnitMeta.generateDummyStorageUnitID(id));
                     dummyStorageUnit.setMasterId(dummyStorageUnit.getId());
                     FragmentMeta dummyFragment = storageEngine.getDummyFragment();
                     dummyFragment.setMasterStorageUnit(dummyStorageUnit);
@@ -292,7 +364,7 @@ public class DefaultMetaManager implements IMetaManager {
         storage.registerVersionChangeHook((version, num) -> {
             double sum = cache.getSumFromTimeSeries();
             Map<String, Double> timeseriesData = cache.getMaxValueFromTimeSeries().stream().
-                collect(Collectors.toMap(TimeSeriesCalDO::getTimeSeries, TimeSeriesCalDO::getValue));
+                    collect(Collectors.toMap(TimeSeriesCalDO::getTimeSeries, TimeSeriesCalDO::getValue));
             double countSum = timeseriesData.values().stream().mapToDouble(Double::doubleValue).sum();
             if (countSum > 1e-9) {
                 timeseriesData.forEach((k, v) -> timeseriesData.put(k, v / countSum * sum));
@@ -402,7 +474,7 @@ public class DefaultMetaManager implements IMetaManager {
                 if (storageEngineMeta.isHasData()) {
                     StorageUnitMeta dummyStorageUnit = storageEngineMeta.getDummyStorageUnit();
                     dummyStorageUnit.setStorageEngineId(id);
-                    dummyStorageUnit.setId(String.format(Constants.DUMMY + "%04d", (int) id));
+                    dummyStorageUnit.setId(StorageUnitMeta.generateDummyStorageUnitID(id));
                     dummyStorageUnit.setMasterId(dummyStorageUnit.getId());
                     FragmentMeta dummyFragment = storageEngineMeta.getDummyFragment();
                     dummyFragment.setMasterStorageUnit(dummyStorageUnit);
@@ -413,6 +485,30 @@ public class DefaultMetaManager implements IMetaManager {
             return true;
         } catch (MetaStorageException e) {
             logger.error("add storage engines error:", e);
+        }
+        return false;
+    }
+
+    @Override
+    public boolean updateStorageEngine(long storageID, StorageEngineMeta storageEngineMeta) {
+        if (getStorageEngine(storageID) == null) {
+            return false;
+        }
+        try {
+            storageEngineMeta.setId(storageID);
+            storage.updateStorageEngine(storageID, storageEngineMeta); // 如果删除成功，则后续更新对应的 dummyFragament 的元数据
+            if (storageEngineMeta.isHasData()) { // 确保内部数据的一致性
+                StorageUnitMeta dummyStorageUnit = storageEngineMeta.getDummyStorageUnit();
+                dummyStorageUnit.setStorageEngineId(storageID);
+                dummyStorageUnit.setId(StorageUnitMeta.generateDummyStorageUnitID(storageID));
+                dummyStorageUnit.setMasterId(dummyStorageUnit.getId());
+                FragmentMeta dummyFragment = storageEngineMeta.getDummyFragment();
+                dummyFragment.setMasterStorageUnit(dummyStorageUnit);
+                dummyFragment.setMasterStorageUnitId(dummyStorageUnit.getId());
+            }
+            return cache.updateStorageEngine(storageID, storageEngineMeta);
+        } catch (MetaStorageException e) {
+            logger.error("update storage engines error:", e);
         }
         return false;
     }
@@ -463,7 +559,17 @@ public class DefaultMetaManager implements IMetaManager {
     }
 
     @Override
-    public Pair<TimeSeriesInterval, TimeInterval> getBoundaryOfStorageUnit(String storageUnitId) {
+    public List<FragmentMeta> getFragments() {
+        return cache.getFragments();
+    }
+
+    @Override
+    public List<FragmentMeta> getFragmentsByStorageUnit(String storageUnitId) {
+        return cache.getFragmentListByStorageUnitId(storageUnitId);
+    }
+
+    @Override
+    public Pair<TimeSeriesRange, TimeInterval> getBoundaryOfStorageUnit(String storageUnitId) {
         List<FragmentMeta> fragmentMetaList = cache.getFragmentListByStorageUnitId(storageUnitId);
 
         String startPath = fragmentMetaList.get(0).getTsInterval().getStartTimeSeries();
@@ -494,19 +600,19 @@ public class DefaultMetaManager implements IMetaManager {
     }
 
     @Override
-    public Map<TimeSeriesInterval, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesInterval tsInterval) {
+    public Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesRange tsInterval) {
         return getFragmentMapByTimeSeriesInterval(tsInterval, false);
     }
 
     @Override
-    public Map<TimeSeriesInterval, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesInterval tsInterval, boolean withDummyFragment) {
-        Map<TimeSeriesInterval, List<FragmentMeta>> fragmentsMap;
+    public Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesRange tsInterval, boolean withDummyFragment) {
+        Map<TimeSeriesRange, List<FragmentMeta>> fragmentsMap;
         if (cache.enableFragmentCacheControl() && cache.getFragmentMinTimestamp() > 0L) { // 最老的分片被逐出去了
             TimeInterval beforeTimeInterval = new TimeInterval(0L, cache.getFragmentMinTimestamp());
             fragmentsMap = storage.getFragmentMapByTimeSeriesIntervalAndTimeInterval(tsInterval, beforeTimeInterval);
             updateStorageUnitReference(fragmentsMap);
-            Map<TimeSeriesInterval, List<FragmentMeta>> recentFragmentsMap = cache.getFragmentMapByTimeSeriesInterval(tsInterval);
-            for (TimeSeriesInterval ts : recentFragmentsMap.keySet()) {
+            Map<TimeSeriesRange, List<FragmentMeta>> recentFragmentsMap = cache.getFragmentMapByTimeSeriesInterval(tsInterval);
+            for (TimeSeriesRange ts : recentFragmentsMap.keySet()) {
                 List<FragmentMeta> fragments = recentFragmentsMap.get(ts);
                 if (fragmentsMap.containsKey(ts)) {
                     fragmentsMap.get(ts).addAll(fragments);
@@ -525,29 +631,35 @@ public class DefaultMetaManager implements IMetaManager {
     }
 
     @Override
-    public Map<TimeSeriesInterval, FragmentMeta> getLatestFragmentMapByTimeSeriesInterval(TimeSeriesInterval tsInterval) {
+    public boolean hasDummyFragment(TimeSeriesRange tsInterval) {
+        List<FragmentMeta> fragmentList = cache.getDummyFragmentsByTimeSeriesInterval(tsInterval);
+        return !fragmentList.isEmpty();
+    }
+
+    @Override
+    public Map<TimeSeriesRange, FragmentMeta> getLatestFragmentMapByTimeSeriesInterval(TimeSeriesRange tsInterval) {
         return cache.getLatestFragmentMapByTimeSeriesInterval(tsInterval);
     }
 
     @Override
-    public Map<TimeSeriesInterval, FragmentMeta> getLatestFragmentMap() {
+    public Map<TimeSeriesRange, FragmentMeta> getLatestFragmentMap() {
         return cache.getLatestFragmentMap();
     }
 
     @Override
-    public Map<TimeSeriesInterval, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesInterval tsInterval, TimeInterval timeInterval) {
+    public Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval, TimeInterval timeInterval) {
         return getFragmentMapByTimeSeriesIntervalAndTimeInterval(tsInterval, timeInterval, false);
     }
 
     @Override
-    public Map<TimeSeriesInterval, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesInterval tsInterval, TimeInterval timeInterval, boolean withDummyFragment) {
-        Map<TimeSeriesInterval, List<FragmentMeta>> fragmentsMap;
+    public Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval, TimeInterval timeInterval, boolean withDummyFragment) {
+        Map<TimeSeriesRange, List<FragmentMeta>> fragmentsMap;
         if (cache.enableFragmentCacheControl() && timeInterval.getStartTime() < cache.getFragmentMinTimestamp()) {
             TimeInterval beforeTimeInterval = new TimeInterval(timeInterval.getStartTime(), cache.getFragmentMinTimestamp());
             fragmentsMap = storage.getFragmentMapByTimeSeriesIntervalAndTimeInterval(tsInterval, beforeTimeInterval);
             updateStorageUnitReference(fragmentsMap);
-            Map<TimeSeriesInterval, List<FragmentMeta>> recentFragmentsMap = cache.getFragmentMapByTimeSeriesIntervalAndTimeInterval(tsInterval, timeInterval);
-            for (TimeSeriesInterval ts : recentFragmentsMap.keySet()) {
+            Map<TimeSeriesRange, List<FragmentMeta>> recentFragmentsMap = cache.getFragmentMapByTimeSeriesIntervalAndTimeInterval(tsInterval, timeInterval);
+            for (TimeSeriesRange ts : recentFragmentsMap.keySet()) {
                 List<FragmentMeta> fragments = recentFragmentsMap.get(ts);
                 if (fragmentsMap.containsKey(ts)) {
                     fragmentsMap.get(ts).addAll(fragments);
@@ -565,9 +677,9 @@ public class DefaultMetaManager implements IMetaManager {
         return fragmentsMap;
     }
 
-    private void mergeToFragmentMap(Map<TimeSeriesInterval, List<FragmentMeta>> fragmentsMap, List<FragmentMeta> fragmentList) {
+    private void mergeToFragmentMap(Map<TimeSeriesRange, List<FragmentMeta>> fragmentsMap, List<FragmentMeta> fragmentList) {
         for (FragmentMeta fragment : fragmentList) {
-            TimeSeriesInterval tsInterval = fragment.getTsInterval();
+            TimeSeriesRange tsInterval = fragment.getTsInterval();
             if (!fragmentsMap.containsKey(tsInterval)) {
                 fragmentsMap.put(tsInterval, new ArrayList<>());
             }
@@ -615,6 +727,7 @@ public class DefaultMetaManager implements IMetaManager {
 
     @Override
     public boolean createFragmentsAndStorageUnits(List<StorageUnitMeta> storageUnits, List<FragmentMeta> fragments) {
+        checkFragmentCompletion(fragments);
         try {
             storage.lockFragment();
             storage.lockStorageUnit();
@@ -646,7 +759,7 @@ public class DefaultMetaManager implements IMetaManager {
                 }
             }
 
-            Map<TimeSeriesInterval, FragmentMeta> latestFragments = getLatestFragmentMap();
+            Map<TimeSeriesRange, FragmentMeta> latestFragments = getLatestFragmentMap();
             for (FragmentMeta originalFragmentMeta : latestFragments.values()) {
                 FragmentMeta fragmentMeta = originalFragmentMeta.endFragmentMeta(fragments.get(0).getTimeInterval().getStartTime());
                 // 在更新分片时，先更新本地
@@ -693,7 +806,7 @@ public class DefaultMetaManager implements IMetaManager {
             toAddStorageUnit.setCreatedBy(id);
             String actualName = storage.addStorageUnit();
             StorageUnitMeta actualMasterStorageUnit = toAddStorageUnit
-                .renameStorageUnitMeta(actualName, actualName);
+                    .renameStorageUnitMeta(actualName, actualName);
             cache.updateStorageUnit(actualMasterStorageUnit);
             for (StorageUnitHook hook : storageUnitHooks) {
                 hook.onChange(null, actualMasterStorageUnit);
@@ -703,7 +816,7 @@ public class DefaultMetaManager implements IMetaManager {
                 slaveStorageUnit.setCreatedBy(id);
                 String slaveActualName = storage.addStorageUnit();
                 StorageUnitMeta actualSlaveStorageUnit = slaveStorageUnit
-                    .renameStorageUnitMeta(slaveActualName, actualName);
+                        .renameStorageUnitMeta(slaveActualName, actualName);
                 actualMasterStorageUnit.addReplica(actualSlaveStorageUnit);
                 for (StorageUnitHook hook : storageUnitHooks) {
                     hook.onChange(null, actualSlaveStorageUnit);
@@ -715,7 +828,7 @@ public class DefaultMetaManager implements IMetaManager {
             // 结束旧分片
             cache.deleteFragmentByTsInterval(fragment.getTsInterval(), fragment);
             fragment = fragment
-                .endFragmentMeta(toAddFragment.getTimeInterval().getStartTime());
+                    .endFragmentMeta(toAddFragment.getTimeInterval().getStartTime());
             cache.addFragment(fragment);
             fragment.setUpdatedBy(id);
             storage.updateFragment(fragment);
@@ -742,6 +855,23 @@ public class DefaultMetaManager implements IMetaManager {
         }
 
         return fragment;
+    }
+
+    @Override
+    public void removeFragment(FragmentMeta fragmentMeta) {
+        try {
+            storage.lockFragment();
+            cache.deleteFragmentByTsInterval(fragmentMeta.getTsInterval(), fragmentMeta);
+            storage.removeFragment(fragmentMeta);
+        } catch (MetaStorageException e) {
+            logger.error("remove fragment error: ", e);
+        } finally {
+            try {
+                storage.releaseFragment();
+            } catch (MetaStorageException e) {
+                logger.error("release fragment lock error: ", e);
+            }
+        }
     }
 
     @Override
@@ -791,7 +921,7 @@ public class DefaultMetaManager implements IMetaManager {
     }
 
     @Override
-    public void updateFragmentByTsInterval(TimeSeriesInterval tsInterval, FragmentMeta fragmentMeta) {
+    public void updateFragmentByTsInterval(TimeSeriesRange tsInterval, FragmentMeta fragmentMeta) {
         try {
             storage.lockFragment();
             // 更新fragment内部信息不需要更新cache
@@ -835,11 +965,107 @@ public class DefaultMetaManager implements IMetaManager {
         return cache.hasFragment();
     }
 
+    private void checkInitialFragmentCompletion(List<FragmentMeta> fragments) {
+        Map<Long, List<FragmentMeta>> fragmentsByStartTime = new HashMap<>();
+        for (FragmentMeta fragment : fragments) {
+            List<FragmentMeta> fragmentList = fragmentsByStartTime.computeIfAbsent(fragment.getTimeInterval().getStartTime(), e -> new ArrayList<>());
+            fragmentList.add(fragment);
+        }
+        // 检查空间边界是否完备
+        for (long startTime : fragmentsByStartTime.keySet()) {
+            List<FragmentMeta> fragmentList = fragmentsByStartTime.get(startTime);
+            long endTime = -1;
+            Map<String, Integer> borders = new HashMap<>();
+            for (FragmentMeta fragment : fragmentList) {
+                if (endTime == -1) {
+                    endTime = fragment.getTimeInterval().getEndTime();
+                }
+                if (endTime != fragment.getTimeInterval().getEndTime()) {
+                    logger.error("fragments which have the same start time should also have the same end time");
+                    return;
+                }
+                String startTs = fragment.getTsInterval().getStartTimeSeries();
+                String endTs = fragment.getTsInterval().getEndTimeSeries();
+                borders.put(startTs, borders.getOrDefault(startTs, 0) - 1);
+                borders.put(endTs, borders.getOrDefault(endTs, 0) + 1);
+            }
+            for (String border : borders.keySet()) {
+                if (borders.get(border) != 0) {
+                    logger.error("initial fragments should be completion");
+                    return;
+                }
+            }
+        }
+        // 检查时间边界是否完备
+        Map<Long, Integer> timeBorders = new HashMap<>();
+        for (long startTime : fragmentsByStartTime.keySet()) {
+            long endTime = fragmentsByStartTime.get(startTime).get(0).getTimeInterval().getEndTime();
+            timeBorders.put(startTime, timeBorders.getOrDefault(startTime, 0) - 1);
+            timeBorders.put(endTime, timeBorders.getOrDefault(endTime, 0) + 1);
+        }
+        boolean seeZeroTime = false, seeMaxTime = false;
+        for (long time : timeBorders.keySet()) {
+            if (time == 0) {
+                seeZeroTime = true;
+                if (timeBorders.get(time) != -1) {
+                    logger.error("initial fragments should be completion");
+                    return;
+                }
+                continue;
+            }
+            if (time == Long.MAX_VALUE) {
+                seeMaxTime = true;
+                if (timeBorders.get(time) != 1) {
+                    logger.error("initial fragments should be completion");
+                    return;
+                }
+                continue;
+            }
+            if (timeBorders.get(time) != 0) {
+                logger.error("initial fragments should be completion");
+                return;
+            }
+        }
+        if (!seeZeroTime || !seeMaxTime) {
+            logger.error("initial fragments should be completion");
+        }
+    }
+
+    private void checkFragmentCompletion(List<FragmentMeta> fragments) {
+        long startTime = -1;
+        Map<String, Integer> borders = new HashMap<>();
+        for (FragmentMeta fragment : fragments) {
+            if (fragment.getTimeInterval().getEndTime() != Long.MAX_VALUE) {
+                logger.error("end time for new fragment should be Long.MAX_VALUE");
+                return;
+            }
+            if (startTime == -1) {
+                startTime = fragment.getTimeInterval().getStartTime();
+            }
+            if (startTime != fragment.getTimeInterval().getStartTime()) {
+                logger.error("new fragments created at the same time should have the same start time");
+                return;
+            }
+            String startTs = fragment.getTsInterval().getStartTimeSeries();
+            String endTs = fragment.getTsInterval().getEndTimeSeries();
+            borders.put(startTs, borders.getOrDefault(startTs, 0) - 1);
+            borders.put(endTs, borders.getOrDefault(endTs, 0) + 1);
+        }
+        for (String border : borders.keySet()) {
+            if (borders.get(border) != 0) {
+                logger.error("new fragments created at the same time should be completion");
+                return;
+            }
+
+        }
+    }
+
     @Override
     public boolean createInitialFragmentsAndStorageUnits(List<StorageUnitMeta> storageUnits, List<FragmentMeta> initialFragments) { // 必须同时初始化 fragment 和 cache，并且这个方法的主体部分在任意时刻只能由某个 iginx 的某个线程执行
         if (cache.hasFragment() && cache.hasStorageUnit()) {
             return false;
         }
+        checkInitialFragmentCompletion(initialFragments);
         List<StorageUnitMeta> newStorageUnits = new ArrayList<>();
         try {
             storage.lockFragment();
@@ -852,7 +1078,7 @@ public class DefaultMetaManager implements IMetaManager {
             // 查看一下服务器上是不是已经有了
             Map<String, StorageUnitMeta> globalStorageUnits = storage.loadStorageUnit();
             if (globalStorageUnits != null && !globalStorageUnits.isEmpty()) { // 服务器上已经有人创建过了，本地只需要加载
-                Map<TimeSeriesInterval, List<FragmentMeta>> globalFragmentMap = storage.loadFragment();
+                Map<TimeSeriesRange, List<FragmentMeta>> globalFragmentMap = storage.loadFragment();
                 newStorageUnits.addAll(globalStorageUnits.values());
                 newStorageUnits.sort(Comparator.comparing(StorageUnitMeta::getId));
                 logger.warn("server has created storage unit, just need to load.");
@@ -934,7 +1160,7 @@ public class DefaultMetaManager implements IMetaManager {
                                                                 long targetStorageId) throws MetaStorageException {
         String actualName = storage.addStorageUnit();
         StorageUnitMeta storageUnitMeta = new StorageUnitMeta(actualName, targetStorageId, actualName,
-            true, false);
+                true, false);
         storageUnitMeta.setCreatedBy(getIginxId());
 
         cache.updateStorageUnit(storageUnitMeta);
@@ -1052,8 +1278,8 @@ public class DefaultMetaManager implements IMetaManager {
             boolean readOnly = Boolean.parseBoolean(extraParams.getOrDefault(Constants.IS_READ_ONLY, "false"));
             StorageEngineMeta storage = new StorageEngineMeta(i, ip, port, hasData, dataPrefix, readOnly, extraParams, storageEngine, id);
             if (hasData) {
-                StorageUnitMeta dummyStorageUnit = new StorageUnitMeta(Constants.DUMMY + String.format("%04d", i), i);
-                Pair<TimeSeriesInterval, TimeInterval> boundary = StorageManager.getBoundaryOfStorage(storage);
+                StorageUnitMeta dummyStorageUnit = new StorageUnitMeta(StorageUnitMeta.generateDummyStorageUnitID(i), i);
+                Pair<TimeSeriesRange, TimeInterval> boundary = StorageManager.getBoundaryOfStorage(storage);
                 FragmentMeta dummyFragment;
                 if (dataPrefix == null) {
                     dummyFragment = new FragmentMeta(boundary.k, boundary.v, dummyStorageUnit);
@@ -1137,7 +1363,7 @@ public class DefaultMetaManager implements IMetaManager {
         return users.get(0);
     }
 
-    protected void updateStorageUnitReference(Map<TimeSeriesInterval, List<FragmentMeta>> fragmentsMap) {
+    protected void updateStorageUnitReference(Map<TimeSeriesRange, List<FragmentMeta>> fragmentsMap) {
         for (List<FragmentMeta> fragments : fragmentsMap.values()) {
             for (FragmentMeta fragment : fragments) {
                 fragment.setMasterStorageUnit(cache.getStorageUnit(fragment.getMasterStorageUnitId()));
@@ -1377,12 +1603,20 @@ public class DefaultMetaManager implements IMetaManager {
         }
     }
 
+    public void updateFragmentPoints(FragmentMeta fragmentMeta, long points) {
+        try {
+            storage.updateFragmentPoints(fragmentMeta, points);
+        } catch (Exception e) {
+            logger.error("encounter error when add fragment points: ", e);
+        }
+    }
+
     @Override
     public Map<String, Long> loadTimeseriesHeat() {
         try {
             return storage.loadTimeseriesHeat();
         } catch (Exception e) {
-            logger.error("encounter error when load fragment points: ", e);
+            logger.error("encounter error when load fragment heat: ", e);
             return new HashMap<>();
         }
     }
@@ -1450,81 +1684,6 @@ public class DefaultMetaManager implements IMetaManager {
         return reshardStatus != NON_RESHARDING;
     }
 
-    private void initMaxActiveEndTimeStatistics() throws MetaStorageException {
-        storage.registerMaxActiveEndTimeStatisticsChangeHook((endTime) -> {
-            if (endTime <= 0L) {
-                return;
-            }
-            updateMaxActiveEndTime(endTime);
-            int updatedCounter = maxActiveEndTimeStatisticsCounter.incrementAndGet();
-            if (isProposer) {
-                logger.info("iginx node {}(proposer) increment max active end time statistics counter {}",
-                    this.id, updatedCounter);
-            } else {
-                logger.info("iginx node {} increment max active end time statistics counter {}", this.id,
-                    updatedCounter);
-            }
-        });
-    }
-
-    private void initReshardStatus() throws MetaStorageException {
-        storage.registerReshardStatusHook(status -> {
-            try {
-                reshardStatus = status;
-                if (reshardStatus.equals(EXECUTING)) {
-                    storage.lockMaxActiveEndTimeStatistics();
-                    storage.addOrUpdateMaxActiveEndTimeStatistics(maxActiveEndTime.get());
-                    storage.releaseMaxActiveEndTimeStatistics();
-
-                    storage.lockReshardCounter();
-                    storage.incrementReshardCounter();
-                    storage.releaseReshardCounter();
-                }
-                if (reshardStatus.equals(NON_RESHARDING)) {
-                    if (isProposer) {
-                        logger.info("iginx node {}(proposer) finish to reshard", id);
-                    } else {
-                        logger.info("iginx node {} finish to reshard", id);
-                    }
-
-                    isProposer = false;
-                    maxActiveEndTimeStatisticsCounter.set(0);
-                }
-            } catch (MetaStorageException e) {
-                logger.error("encounter error when switching reshard status: ", e);
-            }
-        });
-        storage.lockReshardStatus();
-        storage.removeReshardStatus();
-        storage.releaseReshardStatus();
-    }
-
-    private void initReshardCounter() throws MetaStorageException {
-        storage.registerReshardCounterChangeHook(counter -> {
-            try {
-                if (counter <= 0) {
-                    return;
-                }
-                if (isProposer && counter == getIginxList().size() - 1) {
-                    storage.lockReshardCounter();
-                    storage.resetReshardCounter();
-                    storage.releaseReshardCounter();
-
-                    if (reshardStatus == EXECUTING) {
-                        storage.lockReshardStatus();
-                        storage.updateReshardStatus(NON_RESHARDING);
-                        storage.releaseReshardStatus();
-                    }
-                }
-            } catch (MetaStorageException e) {
-                logger.error("encounter error when updating reshard counter: ", e);
-            }
-        });
-        storage.lockReshardCounter();
-        storage.removeReshardCounter();
-        storage.releaseReshardCounter();
-    }
-
     private void initCustomizableReplicaFragments() throws MetaStorageException {
         try {
             Map<FragmentMeta, List<FragmentMeta>> customizableReplicaFragmentsMap = storage.getCustomizableReplicaFragmentMetaList();
@@ -1570,22 +1729,6 @@ public class DefaultMetaManager implements IMetaManager {
     }
 
     @Override
-    public void updateFragmentPoints(FragmentMeta fragmentMeta, long points) {
-        try {
-            storage.lockFragment();
-            storage.updateFragmentPoints(fragmentMeta, points);
-        } catch (Exception e) {
-            logger.error("update fragment error: ", e);
-        } finally {
-            try {
-                storage.releaseFragment();
-            } catch (MetaStorageException e) {
-                logger.error("release fragment lock error: ", e);
-            }
-        }
-    }
-
-    @Override
     public void deleteFragmentPoints(TimeSeriesInterval tsInterval, TimeInterval timeInterval) {
         try {
             storage.lockFragment();
@@ -1603,7 +1746,7 @@ public class DefaultMetaManager implements IMetaManager {
 
     public void updateMaxActiveEndTime(long endTime) {
         maxActiveEndTime.getAndUpdate(e -> Math.max(e, endTime
-            + ConfigDescriptor.getInstance().getConfig().getReshardFragmentTimeMargin() * 1000));
+                + ConfigDescriptor.getInstance().getConfig().getReshardFragmentTimeMargin() * 1000));
     }
 
     public long getMaxActiveEndTime() {

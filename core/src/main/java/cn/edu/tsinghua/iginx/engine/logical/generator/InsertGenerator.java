@@ -13,16 +13,12 @@ import cn.edu.tsinghua.iginx.engine.shared.source.OperatorSource;
 import cn.edu.tsinghua.iginx.engine.shared.source.Source;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import cn.edu.tsinghua.iginx.metadata.IMetaManager;
-import cn.edu.tsinghua.iginx.metadata.entity.FragmentMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.StorageUnitMeta;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeInterval;
-import cn.edu.tsinghua.iginx.metadata.entity.TimeSeriesInterval;
+import cn.edu.tsinghua.iginx.metadata.entity.*;
 import cn.edu.tsinghua.iginx.policy.IPolicy;
 import cn.edu.tsinghua.iginx.policy.PolicyManager;
 import cn.edu.tsinghua.iginx.sql.statement.InsertStatement;
 import cn.edu.tsinghua.iginx.sql.statement.Statement;
 import cn.edu.tsinghua.iginx.utils.Pair;
-import cn.edu.tsinghua.iginx.utils.SortUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +32,7 @@ public class InsertGenerator extends AbstractGenerator {
     private final static InsertGenerator instance = new InsertGenerator();
     private final static IMetaManager metaManager = DefaultMetaManager.getInstance();
     private final IPolicy policy = PolicyManager.getInstance()
-            .getPolicy(ConfigDescriptor.getInstance().getConfig().getPolicyClassName());
+        .getPolicy(ConfigDescriptor.getInstance().getConfig().getPolicyClassName());
 
     private InsertGenerator() {
         this.type = GeneratorType.Insert;
@@ -49,16 +45,15 @@ public class InsertGenerator extends AbstractGenerator {
     @Override
     protected Operator generateRoot(Statement statement) {
         InsertStatement insertStatement = (InsertStatement) statement;
-//        logger.error("insertStatement = {}", insertStatement.toString());
 
         policy.notify(insertStatement);
 
         List<String> pathList = new ArrayList<>(insertStatement.getPaths());
 
-        TimeSeriesInterval tsInterval = new TimeSeriesInterval(pathList.get(0), pathList.get(pathList.size() - 1));
+        TimeSeriesRange tsInterval = new TimeSeriesInterval(pathList.get(0), pathList.get(pathList.size() - 1));
         TimeInterval timeInterval = new TimeInterval(insertStatement.getStartTime(), insertStatement.getEndTime() + 1);
 
-        Map<TimeSeriesInterval, List<FragmentMeta>> fragments = metaManager.getFragmentMapByTimeSeriesIntervalAndTimeInterval(tsInterval, timeInterval);
+        Map<TimeSeriesRange, List<FragmentMeta>> fragments = metaManager.getFragmentMapByTimeSeriesIntervalAndTimeInterval(tsInterval, timeInterval);
         if (fragments.isEmpty()) {
             //on startup
             policy.setNeedReAllocate(false);
@@ -88,22 +83,22 @@ public class InsertGenerator extends AbstractGenerator {
 
     private DataView getDataSection(FragmentMeta meta, RawData rawData) {
         TimeInterval timeInterval = meta.getTimeInterval();
-        TimeSeriesInterval tsInterval = meta.getTsInterval();
-        List<Long> insertTimes = rawData.getTimestamps();
+        TimeSeriesRange tsInterval = meta.getTsInterval();
+        List<Long> insertTimes = rawData.getKeys();
         List<String> paths = rawData.getPaths();
 
         // time overlap doesn't exist.
         if (timeInterval.getStartTime() > insertTimes.get(insertTimes.size() - 1) ||
-                timeInterval.getEndTime() < insertTimes.get(0)) {
+            timeInterval.getEndTime() <= insertTimes.get(0)) {
             return null;
         }
 
         // path overlap doesn't exist.
         if (tsInterval.getStartTimeSeries() != null &&
-                tsInterval.getStartTimeSeries().compareTo(paths.get(paths.size() - 1)) > 0)
+            tsInterval.getStartTimeSeries().compareTo(paths.get(paths.size() - 1)) > 0)
             return null;
         if (tsInterval.getEndTimeSeries() != null &&
-                tsInterval.getEndTimeSeries().compareTo(paths.get(0)) < 0) {
+            tsInterval.getEndTimeSeries().compareTo(paths.get(0)) <= 0) {
             return null;
         }
 

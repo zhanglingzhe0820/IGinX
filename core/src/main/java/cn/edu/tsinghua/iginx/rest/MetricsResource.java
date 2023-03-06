@@ -20,13 +20,11 @@ package cn.edu.tsinghua.iginx.rest;
 
 import cn.edu.tsinghua.iginx.conf.Config;
 import cn.edu.tsinghua.iginx.conf.ConfigDescriptor;
-import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
-import cn.edu.tsinghua.iginx.metadata.IMetaManager;
 import cn.edu.tsinghua.iginx.rest.bean.*;
-import cn.edu.tsinghua.iginx.rest.insert.DataPointsParser;
 import cn.edu.tsinghua.iginx.rest.insert.InsertWorker;
 import cn.edu.tsinghua.iginx.rest.query.QueryExecutor;
 import cn.edu.tsinghua.iginx.rest.query.QueryParser;
+import cn.edu.tsinghua.iginx.thrift.TimePrecision;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +45,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static cn.edu.tsinghua.iginx.rest.bean.SpecialTime.*;
+import static cn.edu.tsinghua.iginx.rest.RestUtils.*;
 
 @Path("/")
 public class MetricsResource {
@@ -271,7 +269,7 @@ public class MetricsResource {
         Query queryAnnoData = getAnnoDataQueryFromTimeSeries(query, timeSeries);
         //先查询title信息
         //查询anno的title以及dsp信息
-        queryAnnoData.setTimePrecision("ns");
+        queryAnnoData.setTimePrecision(TimePrecision.NS);
         QueryResult resultAnno = getAnno(queryAnnoData,1L,MAXTIEM);
 
         //添加cat信息
@@ -289,7 +287,7 @@ public class MetricsResource {
         queryBase.addFirstAggregator();
         queryBase.setStartAbsolute(1L);
         queryBase.setEndAbsolute(TOPTIEM);
-        queryBase.setTimePrecision("ns");
+        queryBase.setTimePrecision(TimePrecision.NS);
         QueryExecutor executorPath = new QueryExecutor(queryBase);
         QueryResult resultPath = executorPath.execute(false);
 
@@ -299,7 +297,7 @@ public class MetricsResource {
         queryAnno = parser.splitAnnoPathToQuery(resultPath);
 
         //查询anno的title以及dsp信息
-        queryAnno.setTimePrecision("ns");
+        queryAnno.setTimePrecision(TimePrecision.NS);
         return getAnno(queryAnno,DESCRIPTIONTIEM,MAXTIEM);
     }
 
@@ -400,7 +398,7 @@ public class MetricsResource {
             Query querySp = parser.addAnnoTags(queryBase);
             querySp.setStartAbsolute(1L);
             querySp.setEndAbsolute(TOPTIEM);
-            querySp.setTimePrecision("ns");
+            querySp.setTimePrecision(TimePrecision.NS);
             QueryExecutor executorPath = new QueryExecutor(querySp);
             QueryResult resultALL = executorPath.execute(false);
 
@@ -413,7 +411,7 @@ public class MetricsResource {
             Query queryAll = parser.getSpecificQuery(resultALL, queryBase);
             queryAll.setStartAbsolute(1L);
             queryAll.setEndAbsolute(TOPTIEM);
-            queryAll.setTimePrecision("ns");
+            queryAll.setTimePrecision(TimePrecision.NS);
 
             //空查询判断
             if(queryAll.getQueryMetrics().isEmpty())
@@ -486,7 +484,7 @@ public class MetricsResource {
         Query querySp = parser.addAnnoTags(queryBase);
         querySp.setStartAbsolute(1L);
         querySp.setEndAbsolute(TOPTIEM);
-        querySp.setTimePrecision("ns");
+        querySp.setTimePrecision(TimePrecision.NS);
         QueryExecutor executorPath = new QueryExecutor(querySp);
         QueryResult resultALL = executorPath.execute(false);
 
@@ -494,7 +492,7 @@ public class MetricsResource {
         Query queryAll = parser.getSpecificQuery(resultALL, queryBase);
         queryAll.setStartAbsolute(1L);
         queryAll.setEndAbsolute(TOPTIEM);
-        queryAll.setTimePrecision("ns");
+        queryAll.setTimePrecision(TimePrecision.NS);
         QueryExecutor executorData = new QueryExecutor(queryAll);
         //执行删除操作
         executorData.deleteMetric();
