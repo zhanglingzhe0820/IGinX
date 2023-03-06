@@ -34,8 +34,6 @@ public class DynamicPolicy implements IPolicy {
     private IMetaManager iMetaManager;
     private static final Config config = ConfigDescriptor.getInstance().getConfig();
     private static final Logger logger = LoggerFactory.getLogger(DynamicPolicy.class);
-    private static final double unbalanceFinalStatusThreshold = config
-        .getUnbalanceFinalStatusThreshold();
     private static final int timeseriesloadBalanceCheckInterval = ConfigDescriptor.getInstance()
         .getConfig().getTimeseriesloadBalanceCheckInterval();
     private static final double maxTimeseriesLoadBalanceThreshold = ConfigDescriptor.getInstance()
@@ -298,113 +296,138 @@ public class DynamicPolicy implements IPolicy {
             currNode++;
         }
 
-        // 无法找到迁移方案的情况，可能是因为分区过大了，则根据序列拆分分区
-        double maxLoad = totalHeat / nodeFragmentMap.size() * (1 + unbalanceFinalStatusThreshold);
-        long maxWriteLoad = 0L;
-        FragmentMeta maxWriteLoadFragment = null;
-        long maxReadLoad = 0L;
-        FragmentMeta maxReadLoadFragment = null;
-        for (Entry<FragmentMeta, Long> fragmentWriteLoadEntry : fragmentWriteLoadMap.entrySet()) {
-            long load = fragmentWriteLoadEntry.getValue();
-            if (maxWriteLoad < load) {
-                maxWriteLoadFragment = fragmentWriteLoadEntry.getKey();
-                maxWriteLoad = load;
+        if (toScaleInNodes.isEmpty()) {
+            // 非缩容且无法找到迁移方案的情况，可能是因为分区过大了，则根据序列拆分分区
+            double maxLoad = totalHeat / nodeFragmentMap.size() * (1 + config.getUnbalanceFinalStatusThreshold());
+            long maxWriteLoad = 0L;
+            FragmentMeta maxWriteLoadFragment = null;
+            long maxReadLoad = 0L;
+            FragmentMeta maxReadLoadFragment = null;
+            for (Entry<FragmentMeta, Long> fragmentWriteLoadEntry : fragmentWriteLoadMap.entrySet()) {
+                long load = fragmentWriteLoadEntry.getValue();
+                if (maxWriteLoad < load) {
+                    maxWriteLoadFragment = fragmentWriteLoadEntry.getKey();
+                    maxWriteLoad = load;
+                }
             }
-        }
-        for (Entry<FragmentMeta, Long> fragmentReadLoadEntry : fragmentReadLoadMap.entrySet()) {
-            long load = fragmentReadLoadEntry.getValue();
-            if (maxReadLoad < load) {
-                maxReadLoadFragment = fragmentReadLoadEntry.getKey();
-                maxReadLoad = load;
+            for (Entry<FragmentMeta, Long> fragmentReadLoadEntry : fragmentReadLoadMap.entrySet()) {
+                long load = fragmentReadLoadEntry.getValue();
+                if (maxReadLoad < load) {
+                    maxReadLoadFragment = fragmentReadLoadEntry.getKey();
+                    maxReadLoad = load;
+                }
             }
-        }
-        logger.error("fragmentWriteLoadMap = {}", fragmentWriteLoadMap);
-        logger.error("fragmentReadLoadMap = {}", fragmentReadLoadMap);
-        if (maxWriteLoadFragment != null || maxReadLoadFragment != null) {
-            if (maxLoad < Math.max(maxWriteLoad, maxReadLoad)) {
-                if (maxWriteLoad >= maxReadLoad) {
-                    executeTimeseriesReshard(maxWriteLoadFragment,
-                        fragmentMetaPointsMap.get(maxWriteLoadFragment), nodeLoadMap, true);
-                } else {
-                    if (fragmentMetaPointsMap.containsKey(maxReadLoadFragment)) {
-                        executeTimeseriesReshard(maxReadLoadFragment,
-                            fragmentMetaPointsMap.get(maxReadLoadFragment), nodeLoadMap, false);
+
+            if (maxWriteLoadFragment != null || maxReadLoadFragment != null) {
+                if (maxLoad < Math.max(maxWriteLoad, maxReadLoad)) {
+                    if (maxWriteLoad >= maxReadLoad) {
+                        executeTimeseriesReshard(maxWriteLoadFragment,
+                            fragmentMetaPointsMap.get(maxWriteLoadFragment), nodeLoadMap, true);
                     } else {
-                        logger.error("no {} in fragmentMetaPointsMap", maxReadLoadFragment);
+                        if (fragmentMetaPointsMap.containsKey(maxReadLoadFragment)) {
+                            executeTimeseriesReshard(maxReadLoadFragment,
+                                fragmentMetaPointsMap.get(maxReadLoadFragment), nodeLoadMap, false);
+                        } else {
+                            logger.error("no {} in fragmentMetaPointsMap", maxReadLoadFragment);
+                        }
                     }
+                    logger.error("end execute timeseries reshard");
                 }
-                logger.error("end execute timeseries reshard");
             }
         }
 
-        logger.error("start to calculate migration final status");
-        int[][][] migrationResults = calculateMigrationFinalStatus(totalHeat / nodeFragmentMap.size(),
-            fragmentMetaPointsMap, nodeFragmentMap, fragmentWriteLoadMap, fragmentReadLoadMap,
-            totalFragmentNum, m, toScaleInNodes);
-        logger.error("end calculate migration final status");
-
-        // 所有的分区
-        FragmentMeta[] allFragmentMetas = new FragmentMeta[totalFragmentNum];
-        int currIndex = 0;
-        for (List<FragmentMeta> fragmentMetas : nodeFragmentMap.values()) {
-            for (FragmentMeta fragmentMeta : fragmentMetas) {
-                allFragmentMetas[currIndex] = fragmentMeta;
-                currIndex++;
-            }
-        }
-        // 所有的节点
-        Long[] allNodes = new Long[nodeFragmentMap.size()];
-        nodeFragmentMap.keySet().toArray(allNodes);
-        // 计算迁移计划
         List<MigrationTask> migrationTasks = new ArrayList<>();
-        for (int i = 0; i < totalFragmentNum; i++) {
-            FragmentMeta fragmentMeta = allFragmentMetas[i];
-            // 有可配置化副本的分片不能迁移
-            if (!DefaultMetaManager.getInstance().getCustomizableReplicaFragmentList(fragmentMeta).isEmpty()) {
-                continue;
+        double prevUnbalanceFinalStatusThreshold = config.getUnbalanceFinalStatusThreshold();
+        do {
+            logger.error("start to calculate migration final status");
+            int[][][] migrationResults = calculateMigrationFinalStatus(totalHeat / nodeFragmentMap.size(),
+                fragmentMetaPointsMap, nodeFragmentMap, fragmentWriteLoadMap, fragmentReadLoadMap,
+                totalFragmentNum, m, toScaleInNodes);
+
+            // 所有的分区
+            FragmentMeta[] allFragmentMetas = new FragmentMeta[totalFragmentNum];
+            int currIndex = 0;
+            for (List<FragmentMeta> fragmentMetas : nodeFragmentMap.values()) {
+                for (FragmentMeta fragmentMeta : fragmentMetas) {
+                    allFragmentMetas[currIndex] = fragmentMeta;
+                    currIndex++;
+                }
             }
-            for (int j = 0; j < allNodes.length; j++) {
-                // 只找迁移的源节点
-                if (m[i][j] == 0) {
-                    // 写要迁移
-                    if (migrationResults[0][i][j] == 0) {
-                        int targetIndex;
-                        for (targetIndex = 0; targetIndex < allNodes.length; targetIndex++) {
-                            if (migrationResults[0][i][targetIndex] == 1) {
-                                break;
+            // 所有的节点
+            Long[] allNodes = new Long[nodeFragmentMap.size()];
+            nodeFragmentMap.keySet().toArray(allNodes);
+            // 计算迁移计划
+            for (int i = 0; i < totalFragmentNum; i++) {
+                FragmentMeta fragmentMeta = allFragmentMetas[i];
+                // 有可配置化副本的分片不能迁移
+                if (!DefaultMetaManager.getInstance().getCustomizableReplicaFragmentList(fragmentMeta).isEmpty()) {
+                    continue;
+                }
+                for (int j = 0; j < allNodes.length; j++) {
+                    // 只找迁移的源节点
+                    if (m[i][j] == 0) {
+                        // 写要迁移
+                        if (migrationResults[0][i][j] == 0) {
+                            int targetIndex;
+                            for (targetIndex = 0; targetIndex < allNodes.length; targetIndex++) {
+                                if (migrationResults[0][i][targetIndex] == 1) {
+                                    break;
+                                }
                             }
-                        }
-                        if (targetIndex == allNodes.length) {
-                            continue;
-                        }
-                        migrationTasks.add(new MigrationTask(fragmentMeta,
-                            fragmentWriteLoadMap.getOrDefault(fragmentMeta, 0L),
-                            fragmentMetaPointsMap
-                                .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
-                            allNodes[targetIndex],
-                            MigrationType.WRITE));
-                    }
-                    // 读要迁移
-                    else if (migrationResults[1][i][j] == 0) {
-                        int targetIndex;
-                        for (targetIndex = 0; targetIndex < allNodes.length; targetIndex++) {
-                            if (migrationResults[1][i][targetIndex] == 1) {
-                                break;
+                            if (targetIndex == allNodes.length) {
+                                continue;
                             }
+                            migrationTasks.add(new MigrationTask(fragmentMeta,
+                                fragmentWriteLoadMap.getOrDefault(fragmentMeta, 0L),
+                                fragmentMetaPointsMap
+                                    .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
+                                allNodes[targetIndex],
+                                MigrationType.WRITE));
                         }
-                        if (targetIndex == allNodes.length) {
-                            continue;
+                        // 读要迁移
+                        else if (migrationResults[1][i][j] == 0) {
+                            int targetIndex;
+                            for (targetIndex = 0; targetIndex < allNodes.length; targetIndex++) {
+                                if (migrationResults[1][i][targetIndex] == 1) {
+                                    break;
+                                }
+                            }
+                            if (targetIndex == allNodes.length) {
+                                continue;
+                            }
+                            migrationTasks.add(new MigrationTask(fragmentMeta,
+                                fragmentReadLoadMap.getOrDefault(fragmentMeta, 0L),
+                                fragmentMetaPointsMap
+                                    .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
+                                allNodes[targetIndex],
+                                MigrationType.QUERY));
                         }
-                        migrationTasks.add(new MigrationTask(fragmentMeta,
-                            fragmentReadLoadMap.getOrDefault(fragmentMeta, 0L),
-                            fragmentMetaPointsMap
-                                .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
-                            allNodes[targetIndex],
-                            MigrationType.QUERY));
+                        // 都要迁移
+                        else if (migrationResults[0][i][j] == 0 && migrationResults[1][i][j] == 0) {
+                            int targetIndex;
+                            for (targetIndex = 0; targetIndex < allNodes.length; targetIndex++) {
+                                if (migrationResults[1][i][targetIndex] == 1) {
+                                    break;
+                                }
+                            }
+                            if (targetIndex == allNodes.length) {
+                                continue;
+                            }
+                            migrationTasks.add(new MigrationTask(fragmentMeta,
+                                fragmentReadLoadMap.getOrDefault(fragmentMeta, 0L) + fragmentWriteLoadMap.getOrDefault(fragmentMeta, 0L),
+                                fragmentMetaPointsMap
+                                    .getOrDefault(fragmentMeta, MigrationTask.RESHARD_MIGRATION_COST), allNodes[j],
+                                allNodes[targetIndex],
+                                MigrationType.WHOLE));
+                        }
                     }
                 }
             }
-        }
+            logger.error("end calculate migration final status");
+            config.setUnbalanceFinalStatusThreshold(config.getUnbalanceFinalStatusThreshold() + 0.1);
+        } while (!toScaleInNodes.isEmpty() && migrationTasks.isEmpty());
+        config.setUnbalanceFinalStatusThreshold(prevUnbalanceFinalStatusThreshold);
+
         logger.error("start to print migration task:");
         for (MigrationTask migrationTask : migrationTasks) {
             logger.error("migration task: " + migrationTask.toString());
@@ -447,7 +470,6 @@ public class DynamicPolicy implements IPolicy {
                         timeseriesHeat.put(timeseriesHeatEntry.getKey(), timeseriesHeatEntry.getValue());
                     }
                 }
-                logger.error("timeseriesHeat = {}", timeseriesHeat);
 
                 Map<String, Long> overLoadTimeseriesMap = new HashMap<>();
                 if (timeseriesHeat.size() == 1) {
@@ -496,6 +518,7 @@ public class DynamicPolicy implements IPolicy {
         List<Integer> toScaleInNodeIndexList = new ArrayList<>();
         int currNodeIndex = 0;
         int currIndex = 0;
+        logger.error("nodeFragmentMap = {}", nodeFragmentMap);
         for (Entry<Long, List<FragmentMeta>> nodeFragmentEntry : nodeFragmentMap.entrySet()) {
             if (toScaleInNodes.contains(nodeFragmentEntry.getKey())) {
                 toScaleInNodeIndexList.add(currNodeIndex);
@@ -519,9 +542,12 @@ public class DynamicPolicy implements IPolicy {
 
         try {
             int loopTime = 0;
-            while (res != LpSolve.OPTIMAL && 1 >= loopTime * 0.1 + unbalanceFinalStatusThreshold) {
-                double maxLoad = averageScore * (1 + unbalanceFinalStatusThreshold + 0.1 * loopTime);
-                double minLoad = averageScore * (1 - unbalanceFinalStatusThreshold - 0.1 * loopTime);
+            while (res != LpSolve.OPTIMAL
+                && 1 >= loopTime * 0.2
+            ) {
+                double maxLoad = averageScore * (1 + config.getUnbalanceFinalStatusThreshold() + 0.1 * loopTime);
+                double minLoad = averageScore * (1 - config.getUnbalanceFinalStatusThreshold() - 0.1 * loopTime);
+                minLoad = minLoad > 0 ? minLoad : 0;
                 // 声明lp_solve优化模型
                 problem = LpSolve.makeLp(0, lpParamNum);
                 problem.setMinim();
@@ -572,19 +598,19 @@ public class DynamicPolicy implements IPolicy {
                 }
 
                 // 缩容条件限定
-                if (toScaleInNodes.size() > 0) {
-                    for (int j = 0; j < nodeFragmentMap.size(); j++) {
-                        double[] loadConstraintList = new double[lpParamNum + 1];
-                        for (int i = 0; i < totalFragmentNum; i++) {
-                            loadConstraintList[i * nodeFragmentMap.size() + j + 1] = writeLoad[i];
-                            loadConstraintList[totalFragmentNum * nodeFragmentMap.size() + i * nodeFragmentMap
-                                .size()
-                                + j + 1] = readLoad[i];
-                        }
-                        problem.addConstraint(loadConstraintList, LpSolve.GE, minLoad);
-                        problem.addConstraint(loadConstraintList, LpSolve.LE, maxLoad);
-                    }
-                }
+//                if (toScaleInNodes.size() > 0) {
+//                    for (int j = 0; j < nodeFragmentMap.size(); j++) {
+//                        double[] loadConstraintList = new double[lpParamNum + 1];
+//                        for (int i = 0; i < totalFragmentNum; i++) {
+//                            loadConstraintList[i * nodeFragmentMap.size() + j + 1] = writeLoad[i];
+//                            loadConstraintList[totalFragmentNum * nodeFragmentMap.size() + i * nodeFragmentMap
+//                                .size()
+//                                + j + 1] = readLoad[i];
+//                        }
+//                        problem.addConstraint(loadConstraintList, LpSolve.GE, minLoad);
+//                        problem.addConstraint(loadConstraintList, LpSolve.LE, maxLoad);
+//                    }
+//                }
 
                 for (int nodeIndex : toScaleInNodeIndexList) {
                     double[] scaleInNodeConstraintList = new double[lpParamNum + 1];
@@ -599,7 +625,7 @@ public class DynamicPolicy implements IPolicy {
                 }
 
                 res = problem.solve();
-                logger.info("problem status: {}, loopTime: {}", res, loopTime);
+                logger.error("problem status: {}, loopTime: {}", res, loopTime);
                 if (res != LpSolve.OPTIMAL) {
                     // 退出优化模型
                     problem.deleteLp();

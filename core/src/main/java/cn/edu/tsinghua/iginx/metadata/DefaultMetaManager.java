@@ -1620,6 +1620,11 @@ public class DefaultMetaManager implements IMetaManager {
         }
     }
 
+    @Override
+    public List<FragmentMeta> getAllFragmentsByStorageEngineId(long storageEngineId) {
+        return cache.getFragmentListByStorageEngineId(storageEngineId);
+    }
+
     public void setStartTimeseriesMonitor(boolean startTimeseriesMonitor) {
         isStartTimeseriesMonitor = startTimeseriesMonitor;
         try {

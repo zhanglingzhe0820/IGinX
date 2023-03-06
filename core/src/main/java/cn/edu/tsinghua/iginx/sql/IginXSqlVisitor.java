@@ -181,7 +181,8 @@ public class IginXSqlVisitor extends SqlBaseVisitor<Statement> {
         // parse engines
         List<StorageEngineContext> engines = ctx.storageEngineSpec().storageEngine();
         for (StorageEngineContext engine : engines) {
-            String ip = engine.ip.getText();
+            String ipStr = engine.ip.getText();
+            String ip = ipStr.substring(ipStr.indexOf(SQLConstant.QUOTE) + 1, ipStr.lastIndexOf(SQLConstant.QUOTE));
             int port = Integer.parseInt(engine.port.getText());
             String typeStr = engine.engineType.getText().trim();
             String type = typeStr.substring(typeStr.indexOf(SQLConstant.QUOTE) + 1, typeStr.lastIndexOf(SQLConstant.QUOTE));

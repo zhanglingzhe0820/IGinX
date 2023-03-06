@@ -206,6 +206,19 @@ public class DefaultMetaCache implements IMetaCache {
         return resultList;
     }
 
+    private static List<FragmentMeta> searchFragmentList(List<FragmentMeta> fragmentMetaList, long storageEngineId) {
+        List<FragmentMeta> resultList = new ArrayList<>();
+        if (fragmentMetaList.isEmpty()) {
+            return resultList;
+        }
+        for (FragmentMeta meta : fragmentMetaList) {
+            if (meta.getMasterStorageUnit().getStorageEngineId() == storageEngineId) {
+                resultList.add(meta);
+            }
+        }
+        return resultList;
+    }
+
     @Override
     public void initFragment(Map<TimeSeriesInterval, List<FragmentMeta>> fragmentListMap) {
         storageUnitLock.readLock().lock();
@@ -479,6 +492,17 @@ public class DefaultMetaCache implements IMetaCache {
         List<FragmentMeta> fragmentMetas = sortedFragmentMetaLists.stream().map(e -> e.v).flatMap(List::stream)
             .sorted(Comparator.comparingLong(o -> o.getTimeInterval().getStartTime())).collect(Collectors.toList());
         resultList = searchFragmentList(fragmentMetas, storageUnitId);
+        fragmentLock.readLock().unlock();
+        return resultList;
+    }
+
+    @Override
+    public List<FragmentMeta> getFragmentListByStorageEngineId(long storageEngineId) {
+        List<FragmentMeta> resultList;
+        fragmentLock.readLock().lock();
+        List<FragmentMeta> fragmentMetas = sortedFragmentMetaLists.stream().map(e -> e.v).flatMap(List::stream)
+            .sorted(Comparator.comparingLong(o -> o.getTimeInterval().getStartTime())).collect(Collectors.toList());
+        resultList = searchFragmentList(fragmentMetas, storageEngineId);
         fragmentLock.readLock().unlock();
         return resultList;
     }

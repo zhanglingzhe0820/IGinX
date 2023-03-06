@@ -639,6 +639,10 @@ STOP
 MIGRATION
     : M I G R A T I O N
     ;
+
+SCALE
+    : S C A L E
+    ;
 //============================
 // End of the keywords list
 //============================

@@ -63,6 +63,8 @@ public interface IMetaCache {
 
     List<FragmentMeta> getFragmentListByStorageUnitId(String storageUnitId);
 
+    List<FragmentMeta> getFragmentListByStorageEngineId(long storageEngineId);
+
     void initCustomizableReplicaFragmentMeta(Map<FragmentMeta, List<FragmentMeta>> fragmentListMap);
 
     void addCustomizableReplicaFragmentMeta(FragmentMeta sourceFragment, List<FragmentMeta> replicaFragment);

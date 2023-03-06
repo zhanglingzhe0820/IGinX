@@ -10,6 +10,8 @@ import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,6 +71,15 @@ public class SimulationBasedMigrationPolicy extends MigrationPolicy {
       executeOneRoundMigration(migrationTaskQueueList, nodeLoadMap);
     }
     executor.shutdown();
+    try {
+      // 不涉及超时时间
+      if (!executor.awaitTermination(100000, TimeUnit.HOURS)) {
+        executor.shutdownNow();
+      }
+    } catch (InterruptedException ex) {
+      executor.shutdownNow();
+      Thread.currentThread().interrupt();
+    }
 
     logger.info("complete all migration task with time consumption: {} ms",
         System.currentTimeMillis() - startTime);

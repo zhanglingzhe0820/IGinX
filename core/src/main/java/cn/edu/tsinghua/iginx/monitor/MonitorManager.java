@@ -26,6 +26,8 @@ public class MonitorManager implements Runnable {
     private final IPolicy policy = PolicyManager.getInstance()
         .getPolicy(ConfigDescriptor.getInstance().getConfig().getPolicyClassName());
 
+    private boolean isScaleIn = false;
+
     private final IMetaManager metaManager = DefaultMetaManager.getInstance();
     private static MonitorManager INSTANCE;
 
@@ -46,6 +48,8 @@ public class MonitorManager implements Runnable {
             while (DefaultMetaManager.getInstance().isResharding()) {
                 Thread.sleep(1000);
             }
+            isScaleIn = true;
+            logger.error("scaleInStorageEngines = {}", storageEngineMetas);
 
             //发起负载均衡判断
             metaManager.updateFragmentRequests(RequestsMonitor.getInstance().getWriteRequestsMap(),
@@ -74,30 +78,36 @@ public class MonitorManager implements Runnable {
                 fragmentHeatReadMap = new HashMap<>();
             }
             Map<FragmentMeta, Long> fragmentMetaPointsMap = metaManager.loadFragmentPoints();
-            Map<Long, List<FragmentMeta>> fragmentOfEachNode = loadFragmentOfEachNode(
-                fragmentHeatWriteMap, fragmentHeatReadMap);
-
             List<Long> toScaleInNodes = new ArrayList<>();
             for (StorageEngineMeta storageEngineMeta : storageEngineMetas) {
                 toScaleInNodes.add(storageEngineMeta.getId());
             }
-            if (DefaultMetaManager.getInstance().executeReshard()) {
-                //发起负载均衡
-                policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
-                    fragmentHeatWriteMap, fragmentHeatReadMap, toScaleInNodes);
-                metaManager.scaleInStorageEngines(storageEngineMetas);
-                for (StorageEngineMeta meta : storageEngineMetas) {
-                    PhysicalEngineImpl.getInstance().getStorageManager().removeStorage(meta);
-                }
-                return true;
+            Map<Long, List<FragmentMeta>> fragmentOfEachNode = loadFragmentOfEachNodeWithColdFragment(
+                fragmentHeatWriteMap, fragmentHeatReadMap, toScaleInNodes);
+
+            logger.error("start to scale in nodes = {}", toScaleInNodes);
+            logger.error("start to scale in fragmentOfEachNode = {}", fragmentOfEachNode);
+            logger.error("fragmentHeatWriteMap = {}", fragmentHeatWriteMap);
+            logger.error("fragmentHeatReadMap = {}", fragmentHeatReadMap);
+//            if (DefaultMetaManager.getInstance().executeReshard()) {
+            //发起负载均衡
+            policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
+                fragmentHeatWriteMap, fragmentHeatReadMap, toScaleInNodes);
+            metaManager.scaleInStorageEngines(storageEngineMetas);
+            for (StorageEngineMeta meta : storageEngineMetas) {
+                PhysicalEngineImpl.getInstance().getStorageManager().removeStorage(meta);
             }
-            return false;
+            metaManager.clearMonitors();
+            return true;
+//            }
+//            return false;
         } catch (Exception e) {
             logger.error("execute scale-in reshard failed :", e);
             return false;
         } finally {
             //完成一轮负载均衡
-            DefaultMetaManager.getInstance().doneReshard();
+//            DefaultMetaManager.getInstance().doneReshard();
+            isScaleIn = false;
         }
     }
 
@@ -108,6 +118,9 @@ public class MonitorManager implements Runnable {
                 //清空节点信息
                 metaManager.clearMonitors();
                 Thread.sleep(interval * 1000L);
+                if (isScaleIn) {
+                    continue;
+                }
 
                 //发起负载均衡判断
                 metaManager.updateFragmentRequests(RequestsMonitor.getInstance().getWriteRequestsMap(),
@@ -137,10 +150,10 @@ public class MonitorManager implements Runnable {
 
                 metaManager.updateFragmentHeat(filterAndGetHeatMap(writeCostList), filterAndGetHeatMap(readCostList));
                 //等待收集完成
-                Thread.sleep(1000);
-//                while (!metaManager.isAllMonitorsCompleteCollection()) {
-//                    Thread.sleep(1000);
-//                }
+//                Thread.sleep(1000);
+                while (!metaManager.isAllMonitorsCompleteCollection()) {
+                    Thread.sleep(1000);
+                }
 
                 // 为了性能和方便，当前仅第一个节点可进行负载均衡及判断
                 if (DefaultMetaManager.getInstance().getIginxList().get(0).getId() == DefaultMetaManager.getInstance().getIginxId()) {
@@ -255,6 +268,43 @@ public class MonitorManager implements Runnable {
         for (Pair<FragmentMeta, Long> pair : soredCostList) {
             long heat = result.getOrDefault(pair.getK(), 0L);
             result.put(pair.getK(), heat + pair.getV());
+        }
+        return result;
+    }
+
+    private Map<Long, List<FragmentMeta>> loadFragmentOfEachNodeWithColdFragment(
+        Map<FragmentMeta, Long> fragmentHeatWriteMap, Map<FragmentMeta, Long> fragmentHeatReadMap, List<Long> toScaleInNodes) {
+        for (long nodeId : toScaleInNodes) {
+            List<FragmentMeta> allFragmentMetas = metaManager.getAllFragmentsByStorageEngineId(nodeId);
+            for (FragmentMeta fragmentMeta : allFragmentMetas) {
+                if (!fragmentHeatReadMap.containsKey(fragmentMeta)) {
+                    fragmentHeatReadMap.put(fragmentMeta, 1L);
+                }
+                if (!fragmentHeatWriteMap.containsKey(fragmentMeta)) {
+                    fragmentHeatWriteMap.put(fragmentMeta, 1L);
+                }
+            }
+        }
+
+        Set<FragmentMeta> fragmentMetaSet = new HashSet<>();
+        Map<Long, List<FragmentMeta>> result = new HashMap<>();
+        fragmentMetaSet.addAll(fragmentHeatWriteMap.keySet());
+        fragmentMetaSet.addAll(fragmentHeatReadMap.keySet());
+
+        for (FragmentMeta fragmentMeta : fragmentMetaSet) {
+            fragmentMetaSet.add(fragmentMeta);
+            List<FragmentMeta> fragmentMetas = result
+                .computeIfAbsent(fragmentMeta.getMasterStorageUnit().getStorageEngineId(),
+                    k -> new ArrayList<>());
+            fragmentMetas.add(fragmentMeta);
+        }
+
+        List<StorageEngineMeta> storageEngineMetas = metaManager.getStorageEngineList();
+        Set<Long> storageIds = result.keySet();
+        for (StorageEngineMeta storageEngineMeta : storageEngineMetas) {
+            if (!storageIds.contains(storageEngineMeta.getId())) {
+                result.put(storageEngineMeta.getId(), new ArrayList<>());
+            }
         }
         return result;
     }

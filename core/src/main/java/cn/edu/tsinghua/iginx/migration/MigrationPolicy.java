@@ -585,9 +585,22 @@ public abstract class MigrationPolicy {
                         migrateData(migrationTask.getSourceStorageId(),
                             migrationTask.getTargetStorageId(),
                             migrationTask.getFragmentMeta());
-                    } else {
+                    } else if (migrationTask.getMigrationType() == MigrationType.WHOLE) {
                         this.logger.error("start to migrate write data: {}", migrationTask);
                         reshardFragment(migrationTask.getSourceStorageId(),
+                            migrationTask.getTargetStorageId(),
+                            migrationTask.getFragmentMeta());
+                    } else {
+                        this.logger.error("start to migrate whole data: {}", migrationTask);
+                        // 写入迁移
+                        FragmentMeta fragmentMeta = reshardFragment(migrationTask.getSourceStorageId(),
+                            migrationTask.getTargetStorageId(),
+                            migrationTask.getFragmentMeta());
+                        if (fragmentMeta != null) {
+                            migrationTask.setFragmentMeta(fragmentMeta);
+                        }
+                        // 查询迁移
+                        migrateData(migrationTask.getSourceStorageId(),
                             migrationTask.getTargetStorageId(),
                             migrationTask.getFragmentMeta());
                     }
@@ -678,7 +691,6 @@ public abstract class MigrationPolicy {
                         tsInterval.getStartTimeSeries(), tsInterval.getEndTimeSeries(),
                         DefaultMetaManager.getInstance().getMaxActiveEndTime(), Long.MAX_VALUE,
                         storageEngineList);
-                logger.info("start to split fragment and storage unit");
                 return DefaultMetaManager.getInstance()
                     .splitFragmentAndStorageUnit(fragmentMetaStorageUnitMetaPair.getV(),
                         fragmentMetaStorageUnitMetaPair.getK(), fragmentMeta);

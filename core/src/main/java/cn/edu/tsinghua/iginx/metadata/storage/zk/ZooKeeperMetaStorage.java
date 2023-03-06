@@ -508,7 +508,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 logger.error(STORAGE_ENGINE_NODE_PREFIX + "/" + childName);
             }
             this.client.delete()
-                .forPath(STORAGE_ENGINE_NODE_PREFIX + String.format("%010d", storageEngine.getId()));
+                .forPath(STORAGE_ENGINE_NODE + String.format("%010d", storageEngine.getId()));
         } catch (Exception e) {
             throw new MetaStorageException("get error when remove storage engine", e);
         } finally {

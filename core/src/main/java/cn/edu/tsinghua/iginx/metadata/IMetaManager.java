@@ -284,4 +284,6 @@ public interface IMetaManager {
     long getMaxActiveEndTime();
 
     void submitMaxActiveEndTime();
+
+    List<FragmentMeta> getAllFragmentsByStorageEngineId(long storageEngineId);
 }

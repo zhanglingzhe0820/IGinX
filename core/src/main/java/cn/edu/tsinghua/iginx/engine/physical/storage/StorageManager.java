@@ -170,7 +170,24 @@ public class StorageManager {
 
     public void removeStorage(StorageEngineMeta meta) {
         Pair<IStorage, ThreadPoolExecutor> pair = storageMap.get(meta.getId());
-        pair.getV().shutdown();
+        ThreadPoolExecutor executor = pair.getV();
+        logger.error("start to shutdown");
+        executor.shutdown();
+        logger.error("end to shutdown");
+        // 等待所有任务执行完
+        try {
+            logger.error("start to awaitTermination");
+            // 不涉及超时时间
+            if (!executor.awaitTermination(100000, TimeUnit.HOURS)) {
+                executor.shutdownNow();
+            }
+            logger.error("end to awaitTermination");
+        } catch (InterruptedException ex) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        logger.error("start to remove");
         storageMap.remove(meta.getId());
+        logger.error("end remove");
     }
 }
