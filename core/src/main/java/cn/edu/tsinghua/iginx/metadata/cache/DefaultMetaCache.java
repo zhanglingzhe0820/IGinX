@@ -533,6 +533,10 @@ public class DefaultMetaCache implements IMetaCache {
         return new ArrayList<>();
     }
 
+    public Map<FragmentMeta, List<FragmentMeta>> getAllCustomizableReplicaFragmentList(){
+        return customizableReplicaFragmentMetaList;
+    }
+
     @Override
     public boolean hasFragment() {
         return !sortedFragmentMetaLists.isEmpty() || (enableFragmentCacheControl && minTimestamp != 0L);

@@ -44,6 +44,10 @@ public class TaskExecuteResult {
         this.exception = exception;
     }
 
+    public boolean isRowStreamNull() {
+        return this.rowStream == null;
+    }
+
     public RowStream getRowStream() {
         RowStream rowStream = this.rowStream;
         this.rowStream = null;

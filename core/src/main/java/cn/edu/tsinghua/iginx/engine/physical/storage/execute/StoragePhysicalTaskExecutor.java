@@ -112,7 +112,7 @@ public class StoragePhysicalTaskExecutor {
                                 continue;
                             }
                             pair.v.submit(() -> {
-                                TaskExecuteResult result = null;
+                                TaskExecuteResult result;
                                 long taskId = System.nanoTime();
                                 try {
                                     result = pair.k.execute(task);

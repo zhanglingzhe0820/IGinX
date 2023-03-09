@@ -26,6 +26,8 @@ public class MonitorManager implements Runnable {
         .getUnbalanceThreshold();
     private final IPolicy policy = PolicyManager.getInstance()
         .getPolicy(ConfigDescriptor.getInstance().getConfig().getPolicyClassName());
+    private final int fragmentClearTime = 10;
+    private long currLoopTime = 0;
 
     private boolean isScaleIn = false;
 
@@ -118,7 +120,10 @@ public class MonitorManager implements Runnable {
         while (true) {
             try {
                 //清空节点信息
-                compactionManager.clearFragment();
+                currLoopTime++;
+                if (currLoopTime % fragmentClearTime == 0) {
+                    compactionManager.clearFragment();
+                }
                 metaManager.clearMonitors();
                 Thread.sleep(interval * 1000L);
                 if (isScaleIn) {

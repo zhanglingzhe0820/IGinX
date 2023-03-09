@@ -577,7 +577,7 @@ public abstract class MigrationPolicy {
                         if (migrationTask.getFragmentMeta().getTimeInterval().getEndTime() == Long.MAX_VALUE) {
                             this.logger.error("start to reshard query data: {}", migrationTask);
                             FragmentMeta fragmentMeta = reshardFragment(migrationTask.getSourceStorageId(),
-                                migrationTask.getTargetStorageId(),
+                                migrationTask.getSourceStorageId(),
                                 migrationTask.getFragmentMeta());
                             migrationTask.setFragmentMeta(fragmentMeta);
                         }
@@ -671,8 +671,8 @@ public abstract class MigrationPolicy {
         }
     }
 
-    private FragmentMeta reshardFragment(long sourceStorageId, long targetStorageId,
-                                         FragmentMeta fragmentMeta) {
+    private synchronized FragmentMeta reshardFragment(long sourceStorageId, long targetStorageId,
+                                                      FragmentMeta fragmentMeta) {
         try {
             migrationLogger.logMigrationExecuteTaskStart(
                 new MigrationExecuteTask(fragmentMeta, fragmentMeta.getMasterStorageUnitId(),
@@ -681,19 +681,45 @@ public abstract class MigrationPolicy {
             // [startTime, +∞) & (startPath, endPath)
             TimeSeriesRange tsInterval = fragmentMeta.getTsInterval();
             TimeInterval timeInterval = fragmentMeta.getTimeInterval();
-            List<Long> storageEngineList = new ArrayList<>();
-            storageEngineList.add(targetStorageId);
+            long middleTime = DefaultMetaManager.getInstance().getMaxActiveEndTime();
+            FragmentMeta result = null;
 
             // 排除乱序写入问题
             if (timeInterval.getEndTime() == Long.MAX_VALUE) {
-                Pair<FragmentMeta, StorageUnitMeta> fragmentMetaStorageUnitMetaPair = policy
-                    .generateFragmentAndStorageUnitByTimeSeriesIntervalAndTimeInterval(
-                        tsInterval.getStartTimeSeries(), tsInterval.getEndTimeSeries(),
-                        DefaultMetaManager.getInstance().getMaxActiveEndTime(), Long.MAX_VALUE,
-                        storageEngineList);
-                return DefaultMetaManager.getInstance()
-                    .splitFragmentAndStorageUnit(fragmentMetaStorageUnitMetaPair.getV(),
-                        fragmentMetaStorageUnitMetaPair.getK(), fragmentMeta);
+                // 时间维度必须对齐，因此切一个就必须全切
+                Map<TimeSeriesRange, FragmentMeta> timeSeriesRangeFragmentMetaMap = DefaultMetaManager.getInstance().getLatestFragmentMap();
+                for (Entry<TimeSeriesRange, FragmentMeta> entry : timeSeriesRangeFragmentMetaMap.entrySet()) {
+                    TimeSeriesRange timeSeriesRange = entry.getKey();
+                    FragmentMeta currFragmentMeta = entry.getValue();
+                    if (timeSeriesRange.getStartTimeSeries().equals(tsInterval.getStartTimeSeries()) && timeSeriesRange.getEndTimeSeries().equals(tsInterval.getEndTimeSeries())) {
+                        if (sourceStorageId != targetStorageId) {
+                            List<Long> storageEngineList = new ArrayList<>();
+                            storageEngineList.add(targetStorageId);
+                            Pair<FragmentMeta, StorageUnitMeta> fragmentMetaStorageUnitMetaPair = policy
+                                .generateFragmentAndStorageUnitByTimeSeriesIntervalAndTimeInterval(
+                                    tsInterval.getStartTimeSeries(), tsInterval.getEndTimeSeries(),
+                                    middleTime, Long.MAX_VALUE,
+                                    storageEngineList);
+                            result = DefaultMetaManager.getInstance()
+                                .splitFragmentAndStorageUnit(fragmentMetaStorageUnitMetaPair.getV(),
+                                    fragmentMetaStorageUnitMetaPair.getK(), fragmentMeta);
+                        } else {
+                            if (middleTime > currFragmentMeta.getTimeInterval().getStartTime()) {
+                                result = DefaultMetaManager.getInstance().endFragmentByTimeInterval(currFragmentMeta, middleTime);
+                            } else {
+                                result = fragmentMeta;
+                            }
+                        }
+                    } else {
+                        // 保留在原节点
+                        logger.error("reshard fragment = {}", currFragmentMeta);
+                        logger.error("middle time = {}", middleTime);
+                        if (middleTime > currFragmentMeta.getTimeInterval().getStartTime()) {
+                            DefaultMetaManager.getInstance().endFragmentByTimeInterval(currFragmentMeta, middleTime);
+                        }
+                    }
+                }
+                return result;
             }
             return null;
         } finally {

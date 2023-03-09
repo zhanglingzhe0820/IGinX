@@ -73,6 +73,8 @@ public interface IMetaCache {
 
     List<FragmentMeta> getCustomizableReplicaFragmentList(FragmentMeta sourceFragment);
 
+    Map<FragmentMeta, List<FragmentMeta>> getAllCustomizableReplicaFragmentList();
+
     boolean hasFragment();
 
     long getFragmentMinTimestamp();

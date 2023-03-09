@@ -4,6 +4,7 @@ import cn.edu.tsinghua.iginx.conf.ConfigDescriptor;
 import cn.edu.tsinghua.iginx.engine.physical.exception.PhysicalException;
 import cn.edu.tsinghua.iginx.engine.physical.task.TaskExecuteResult;
 import cn.edu.tsinghua.iginx.engine.shared.data.read.Field;
+import cn.edu.tsinghua.iginx.engine.shared.data.read.RowStream;
 import cn.edu.tsinghua.iginx.engine.shared.operator.type.OperatorType;
 import cn.edu.tsinghua.iginx.metadata.DefaultMetaManager;
 import org.slf4j.Logger;
@@ -40,18 +41,22 @@ public class TimeseriesMonitor implements IMonitor {
 
     public void recordAfter(long taskId, TaskExecuteResult result, OperatorType operatorType) {
         try {
-            if (isEnableMonitor && DefaultMetaManager.getInstance().isStartTimeseriesMonitor() && operatorType == OperatorType.Project && result != null && result.getRowStream() != null && result.getRowStream().hasNext()) {
-                // 构建本次访问的timeseries列表
-                List<String> timeseriesList = new ArrayList<>();
-                for (Field field : result.getRowStream().getHeader().getFields()) {
-                    timeseriesList.add(field.getName());
-                }
+            if (isEnableMonitor && DefaultMetaManager.getInstance().isStartTimeseriesMonitor() && operatorType == OperatorType.Project && result != null && !result.isRowStreamNull()) {
+                RowStream rowStream = result.getRowStream();
+                result.setRowStream(rowStream);
+                if (rowStream.hasNext()) {
+                    // 构建本次访问的timeseries列表
+                    List<String> timeseriesList = new ArrayList<>();
+                    for (Field field : rowStream.getHeader().getFields()) {
+                        timeseriesList.add(field.getName());
+                    }
 
-                long duration = (System.nanoTime() - taskId) / 1000000;
-                long averageLoad = duration / timeseriesList.size(); //这里认为范围负载被所有时间序列均分
-                for (String timeseries : timeseriesList) {
-                    long load = timeseriesLoadMap.getOrDefault(timeseries, 0L);
-                    timeseriesLoadMap.put(timeseries, averageLoad + load);
+                    long duration = (System.nanoTime() - taskId) / 1000000;
+                    long averageLoad = duration / timeseriesList.size(); //这里认为范围负载被所有时间序列均分
+                    for (String timeseries : timeseriesList) {
+                        long load = timeseriesLoadMap.getOrDefault(timeseries, 0L);
+                        timeseriesLoadMap.put(timeseries, averageLoad + load);
+                    }
                 }
             }
         } catch (PhysicalException e) {

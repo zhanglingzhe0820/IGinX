@@ -92,6 +92,7 @@ public class AnalyzeMonitorManager implements Runnable {
 //                    logger.error("write requests without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeRequests);
 //                    logger.error("read requests without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readRequests);
                 }
+                logger.error("curr fragment num: {}", DefaultMetaManager.getInstance().getFragments().size());
             } catch (Exception e) {
                 logger.error("analyze monitor manager error ", e);
             }

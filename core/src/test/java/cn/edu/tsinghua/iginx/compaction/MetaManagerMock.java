@@ -374,6 +374,11 @@ public class MetaManagerMock implements IMetaManager {
     }
 
     @Override
+    public FragmentMeta endFragmentByTimeInterval(FragmentMeta fragmentMeta, long middleTime) {
+        return null;
+    }
+
+    @Override
     public void endFragmentByTimeSeriesInterval(FragmentMeta fragmentMeta, String endTimeSeries) {
 
     }
@@ -395,6 +400,11 @@ public class MetaManagerMock implements IMetaManager {
 
     @Override
     public List<FragmentMeta> getCustomizableReplicaFragmentList(FragmentMeta sourceFragment) {
+        return null;
+    }
+
+    @Override
+    public Map<FragmentMeta, List<FragmentMeta>> getAllCustomizableReplicaFragmentList() {
         return null;
     }
 

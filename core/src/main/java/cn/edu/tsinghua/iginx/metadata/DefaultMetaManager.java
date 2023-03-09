@@ -149,20 +149,7 @@ public class DefaultMetaManager implements IMetaManager {
     }
 
     private void initMaxActiveEndTimeStatistics() throws MetaStorageException {
-        storage.registerMaxActiveEndTimeStatisticsChangeHook((endTime) -> {
-            if (endTime <= 0L) {
-                return;
-            }
-            updateMaxActiveEndTime(endTime);
-            int updatedCounter = maxActiveEndTimeStatisticsCounter.incrementAndGet();
-            if (isProposer) {
-                logger.info("iginx node {}(proposer) increment max active end time statistics counter {}",
-                    this.id, updatedCounter);
-            } else {
-                logger.info("iginx node {} increment max active end time statistics counter {}", this.id,
-                    updatedCounter);
-            }
-        });
+        maxActiveEndTime.set(storage.getMaxActiveEndTimeStatistics());
     }
 
     private void initReshardStatus() throws MetaStorageException {
@@ -235,7 +222,7 @@ public class DefaultMetaManager implements IMetaManager {
             cache.addIginx(iginx);
         }
         IginxMeta iginx = new IginxMeta(0L, ConfigDescriptor.getInstance().getConfig().getIp(),
-                ConfigDescriptor.getInstance().getConfig().getPort(), null);
+            ConfigDescriptor.getInstance().getConfig().getPort(), null);
         id = storage.registerIginx(iginx);
         SnowFlakeUtils.init(id);
     }
@@ -364,7 +351,7 @@ public class DefaultMetaManager implements IMetaManager {
         storage.registerVersionChangeHook((version, num) -> {
             double sum = cache.getSumFromTimeSeries();
             Map<String, Double> timeseriesData = cache.getMaxValueFromTimeSeries().stream().
-                    collect(Collectors.toMap(TimeSeriesCalDO::getTimeSeries, TimeSeriesCalDO::getValue));
+                collect(Collectors.toMap(TimeSeriesCalDO::getTimeSeries, TimeSeriesCalDO::getValue));
             double countSum = timeseriesData.values().stream().mapToDouble(Double::doubleValue).sum();
             if (countSum > 1e-9) {
                 timeseriesData.forEach((k, v) -> timeseriesData.put(k, v / countSum * sum));
@@ -806,7 +793,7 @@ public class DefaultMetaManager implements IMetaManager {
             toAddStorageUnit.setCreatedBy(id);
             String actualName = storage.addStorageUnit();
             StorageUnitMeta actualMasterStorageUnit = toAddStorageUnit
-                    .renameStorageUnitMeta(actualName, actualName);
+                .renameStorageUnitMeta(actualName, actualName);
             cache.updateStorageUnit(actualMasterStorageUnit);
             for (StorageUnitHook hook : storageUnitHooks) {
                 hook.onChange(null, actualMasterStorageUnit);
@@ -816,7 +803,7 @@ public class DefaultMetaManager implements IMetaManager {
                 slaveStorageUnit.setCreatedBy(id);
                 String slaveActualName = storage.addStorageUnit();
                 StorageUnitMeta actualSlaveStorageUnit = slaveStorageUnit
-                        .renameStorageUnitMeta(slaveActualName, actualName);
+                    .renameStorageUnitMeta(slaveActualName, actualName);
                 actualMasterStorageUnit.addReplica(actualSlaveStorageUnit);
                 for (StorageUnitHook hook : storageUnitHooks) {
                     hook.onChange(null, actualSlaveStorageUnit);
@@ -828,7 +815,7 @@ public class DefaultMetaManager implements IMetaManager {
             // 结束旧分片
             cache.deleteFragmentByTsInterval(fragment.getTsInterval(), fragment);
             fragment = fragment
-                    .endFragmentMeta(toAddFragment.getTimeInterval().getStartTime());
+                .endFragmentMeta(toAddFragment.getTimeInterval().getStartTime());
             cache.addFragment(fragment);
             fragment.setUpdatedBy(id);
             storage.updateFragment(fragment);
@@ -889,6 +876,38 @@ public class DefaultMetaManager implements IMetaManager {
                 logger.error("release fragment lock error: ", e);
             }
         }
+    }
+
+    @Override
+    public FragmentMeta endFragmentByTimeInterval(FragmentMeta fragmentMeta, long middleTime) {
+        try {
+            storage.lockFragment();
+
+            TimeInterval toAddTimeInterval = new TimeInterval(middleTime, Long.MAX_VALUE);
+            TimeSeriesRange toAddTsInterval = new TimeSeriesInterval(fragmentMeta.getTsInterval().getStartTimeSeries(), fragmentMeta.getTsInterval().getEndTimeSeries());
+            FragmentMeta toAddFragment = new FragmentMeta(toAddTimeInterval, toAddTsInterval, id, id, fragmentMeta.getMasterStorageUnitId(), fragmentMeta.getMasterStorageUnit(), fragmentMeta.getFakeStorageUnitId(), false, false);
+
+            // 结束旧分片
+            cache.deleteFragmentByTsInterval(fragmentMeta.getTsInterval(), fragmentMeta);
+            fragmentMeta = fragmentMeta.endFragmentMeta(middleTime);
+            cache.addFragment(fragmentMeta);
+            fragmentMeta.setUpdatedBy(id);
+            storage.updateFragment(fragmentMeta);
+
+            // 更新新分片
+            cache.addFragment(toAddFragment);
+            storage.addFragment(toAddFragment);
+            return fragmentMeta;
+        } catch (MetaStorageException e) {
+            logger.error("end fragment by time interval error: ", e);
+        } finally {
+            try {
+                storage.releaseFragment();
+            } catch (MetaStorageException e) {
+                logger.error("release fragment lock error: ", e);
+            }
+        }
+        return null;
     }
 
     @Override
@@ -958,6 +977,10 @@ public class DefaultMetaManager implements IMetaManager {
 
     public List<FragmentMeta> getCustomizableReplicaFragmentList(FragmentMeta sourceFragment) {
         return cache.getCustomizableReplicaFragmentList(sourceFragment);
+    }
+
+    public Map<FragmentMeta, List<FragmentMeta>> getAllCustomizableReplicaFragmentList() {
+        return cache.getAllCustomizableReplicaFragmentList();
     }
 
     @Override
@@ -1160,7 +1183,7 @@ public class DefaultMetaManager implements IMetaManager {
                                                                 long targetStorageId) throws MetaStorageException {
         String actualName = storage.addStorageUnit();
         StorageUnitMeta storageUnitMeta = new StorageUnitMeta(actualName, targetStorageId, actualName,
-                true, false);
+            true, false);
         storageUnitMeta.setCreatedBy(getIginxId());
 
         cache.updateStorageUnit(storageUnitMeta);
@@ -1746,7 +1769,7 @@ public class DefaultMetaManager implements IMetaManager {
 
     public void updateMaxActiveEndTime(long endTime) {
         maxActiveEndTime.getAndUpdate(e -> Math.max(e, endTime
-                + ConfigDescriptor.getInstance().getConfig().getReshardFragmentTimeMargin() * 1000));
+            + ConfigDescriptor.getInstance().getConfig().getReshardFragmentTimeMargin() * 1000));
     }
 
     public long getMaxActiveEndTime() {

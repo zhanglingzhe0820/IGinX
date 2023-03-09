@@ -26,6 +26,7 @@ import cn.edu.tsinghua.iginx.policy.simple.TimeSeriesCalDO;
 import cn.edu.tsinghua.iginx.sql.statement.InsertStatement;
 import cn.edu.tsinghua.iginx.thrift.AuthType;
 import cn.edu.tsinghua.iginx.utils.Pair;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -89,8 +90,8 @@ public interface IMetaManager {
 
     /**
      * 获取某个du的时空范围
-     * */
-    Pair<TimeSeriesRange,TimeInterval> getBoundaryOfStorageUnit(String storageUnitId);
+     */
+    Pair<TimeSeriesRange, TimeInterval> getBoundaryOfStorageUnit(String storageUnitId);
 
     /**
      * 获取某个时间序列区间的所有分片，不会返回虚拟堆叠分片
@@ -121,13 +122,13 @@ public interface IMetaManager {
      * 获取某个时间序列区间在某个时间区间的所有分片，不会返回虚拟堆叠分片。
      */
     Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval,
-                                                                                                  TimeInterval timeInterval);
+                                                                                               TimeInterval timeInterval);
 
     /**
      * 获取某个时间序列区间在某个时间区间的所有分片，根据参数决定是否返回虚拟堆叠分片
      */
     Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval,
-                                                                                                  TimeInterval timeInterval, boolean withDummyFragment);
+                                                                                               TimeInterval timeInterval, boolean withDummyFragment);
 
     /**
      * 获取某个时间序列的所有分片（按照分片时间戳排序），会返回虚拟堆叠分片
@@ -152,6 +153,7 @@ public interface IMetaManager {
 
     /**
      * 用于负载均衡，切割分片和du
+     *
      * @return
      */
     FragmentMeta splitFragmentAndStorageUnit(StorageUnitMeta toAddStorageUnit, FragmentMeta toAddFragment, FragmentMeta fragment);
@@ -283,6 +285,8 @@ public interface IMetaManager {
 
     void addFragment(FragmentMeta fragmentMeta);
 
+    FragmentMeta endFragmentByTimeInterval(FragmentMeta fragmentMeta, long middleTime);
+
     void endFragmentByTimeSeriesInterval(FragmentMeta fragmentMeta, String endTimeSeries);
 
     void updateFragmentByTsInterval(TimeSeriesRange tsInterval, FragmentMeta fragmentMeta);
@@ -292,6 +296,8 @@ public interface IMetaManager {
     void removeCustomizableReplicaFragmentMeta(FragmentMeta sourceFragment);
 
     List<FragmentMeta> getCustomizableReplicaFragmentList(FragmentMeta sourceFragment);
+
+    Map<FragmentMeta, List<FragmentMeta>> getAllCustomizableReplicaFragmentList();
 
     void updateFragmentPoints(FragmentMeta fragmentMeta, long points);
 

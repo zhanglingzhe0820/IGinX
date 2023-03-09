@@ -34,7 +34,6 @@ public class StoragePhysicalTask extends AbstractPhysicalTask {
     private long storage;
     private boolean dummyStorageUnit;
     private boolean isMigration;
-    private boolean isHit = false;
 
     public StoragePhysicalTask(List<Operator> operators) {
         this(operators, ((FragmentSource) ((UnaryOperator) operators.get(0)).getSource()).getFragment(), true, false);
@@ -49,14 +48,6 @@ public class StoragePhysicalTask extends AbstractPhysicalTask {
         this.targetFragment = targetFragment;
         this.sync = sync;
         this.needBroadcasting = needBroadcasting;
-    }
-
-    public boolean isHit() {
-        return isHit;
-    }
-
-    public void setHit(boolean hit) {
-        isHit = hit;
     }
 
     public FragmentMeta getTargetFragment() {

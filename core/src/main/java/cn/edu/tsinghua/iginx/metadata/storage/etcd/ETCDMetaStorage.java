@@ -177,7 +177,6 @@ public class ETCDMetaStorage implements IMetaStorage {
     private ReshardCounterChangeHook reshardCounterChangeHook = null;
     private long reshardCounterLease = -1L;
     private Watch.Watcher maxActiveEndTimeStatisticsWatcher;
-    private MaxActiveEndTimeStatisticsChangeHook maxActiveEndTimeStatisticsChangeHook = null;
     private long maxActiveEndTimeStatisticsLease = -1L;
 
     private final int IGINX_NODE_LENGTH = 7;
@@ -514,44 +513,6 @@ public class ETCDMetaStorage implements IMetaStorage {
                                 case DELETE:
                                     counter = JsonUtils.fromJson(event.getPrevKV().getValue().getBytes(), Integer.class);
                                     reshardCounterChangeHook.onChange(counter);
-                                    break;
-                                default:
-                                    logger.error("unexpected watchEvent: " + event.getEventType());
-                                    break;
-                            }
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable throwable) {
-
-                    }
-
-                    @Override
-                    public void onCompleted() {
-
-                    }
-                });
-
-        // 注册 maxActiveEndTimeStatistics 的监听
-        this.maxActiveEndTimeStatisticsWatcher = client.getWatchClient().watch(ByteSequence.from(MAX_ACTIVE_END_TIME_STATISTICS_NODE_PREFIX.getBytes()),
-                WatchOption.newBuilder().withPrefix(ByteSequence.from(MAX_ACTIVE_END_TIME_STATISTICS_NODE_PREFIX.getBytes())).withPrevKV(true).build(),
-                new Watch.Listener() {
-                    @Override
-                    public void onNext(WatchResponse watchResponse) {
-                        if (ETCDMetaStorage.this.maxActiveEndTimeStatisticsChangeHook == null) {
-                            return;
-                        }
-                        for (WatchEvent event : watchResponse.getEvents()) {
-                            long endTime;
-                            switch (event.getEventType()) {
-                                case PUT:
-                                    endTime = JsonUtils.fromJson(event.getKeyValue().getValue().getBytes(), Long.class);
-                                    maxActiveEndTimeStatisticsChangeHook.onChange(endTime);
-                                    break;
-                                case DELETE:
-                                    endTime = JsonUtils.fromJson(event.getPrevKV().getValue().getBytes(), Long.class);
-                                    maxActiveEndTimeStatisticsChangeHook.onChange(endTime);
                                     break;
                                 default:
                                     logger.error("unexpected watchEvent: " + event.getEventType());
@@ -1915,12 +1876,6 @@ public class ETCDMetaStorage implements IMetaStorage {
         } finally {
             maxActiveEndTimeStatisticsLeaseLock.unlock();
         }
-    }
-
-    @Override
-    public void registerMaxActiveEndTimeStatisticsChangeHook(
-            MaxActiveEndTimeStatisticsChangeHook hook) throws MetaStorageException {
-        this.maxActiveEndTimeStatisticsChangeHook = hook;
     }
 
     @Override

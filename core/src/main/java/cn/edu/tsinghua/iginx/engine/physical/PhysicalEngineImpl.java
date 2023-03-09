@@ -180,7 +180,7 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                     toMigrateFragment.setMasterStorageUnit(targetReplicaStorageUnitMetaList.get(0));
                     DefaultMetaManager.getInstance().updateFragmentByTsInterval(toMigrateFragment.getTsInterval(), toMigrateFragment);
                 }
-                return selectResult.getRowStream();
+                return selectRowStream;
             } else {
                 GlobalPhysicalTask task = new GlobalPhysicalTask(root);
                 TaskExecuteResult result = storageTaskExecutor.executeGlobalTask(task);
@@ -196,24 +196,19 @@ public class PhysicalEngineImpl implements PhysicalEngine {
         if (ConfigDescriptor.getInstance().getConfig().isEnableCustomizableReplica()) {
             for (StoragePhysicalTask storagePhysicalTask : storageTasks) {
                 // 如果是查询请求，可能有可配置化副本，随机发送到任何一个副本上
-                boolean isHit = false;
                 if (!storagePhysicalTask.getOperators().isEmpty() && storagePhysicalTask.getOperators().get(0).getType() == OperatorType.Project) {
                     FragmentMeta fragment = storagePhysicalTask.getTargetFragment();
                     if (fragment != null) {
                         List<FragmentMeta> fragmentMetas = DefaultMetaCache.getInstance().getCustomizableReplicaFragmentList(fragment);
                         if (!fragmentMetas.isEmpty()) {
                             int randomIndex = new Random().nextInt(fragmentMetas.size());
-                            isHit = true;
                             FragmentMeta fragmentMeta = fragmentMetas.get(randomIndex);
                             storagePhysicalTask.setTargetFragment(fragmentMetas.get(randomIndex));
                             storagePhysicalTask.setStorageUnit(fragmentMeta.getMasterStorageUnitId());
                             storagePhysicalTask.setStorage(fragmentMeta.getMasterStorageUnit().getStorageEngineId());
-                        } else {
-//                        logger.error("query is not hit fragment = {}", fragment);
                         }
                     }
                 }
-                storagePhysicalTask.setHit(isHit);
             }
         }
         storageTaskExecutor.commit(storageTasks);

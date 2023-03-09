@@ -129,8 +129,6 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
 
     private static final String MAX_ACTIVE_END_TIME_STATISTICS_NODE = "/statistics/end/time/active/max/node";
 
-    private static final String MAX_ACTIVE_END_TIME_STATISTICS_NODE_PREFIX = "/statistics/end/time/active/max";
-
     private static final String CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX = "/fragments/customizable/replica";
 
     private static final String RESHARD_STATUS_NODE_PREFIX = "/status/reshard";
@@ -191,7 +189,6 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     private EnableTimeseriesMonitorChangeHook enableTimeseriesMonitorChangeHook = null;
     private ReshardStatusChangeHook reshardStatusChangeHook = null;
     private ReshardCounterChangeHook reshardCounterChangeHook = null;
-    private MaxActiveEndTimeStatisticsChangeHook maxActiveEndTimeStatisticsChangeHook = null;
     private CustomizableReplicaFragmentChangeHook customizableReplicaFragmentChangeHook = null;
 
     protected TreeCache userCache;
@@ -476,7 +473,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
             for (String childName : children) {
                 byte[] data = this.client.getData()
                     .forPath(STORAGE_ENGINE_NODE_PREFIX + "/" + childName);
-                StorageEngineMeta storageEngineMeta = JsonUtils.fromJson(JsonUtils.addType("tsInterval", new String(data).contains("timeSeries") ? "TimeSeriesPrefixRange" : "TimeSeriesInterval", data), StorageEngineMeta.class);
+                StorageEngineMeta storageEngineMeta = JsonUtils.fromJson(data, StorageEngineMeta.class);
                 if (storageEngineMeta == null) {
                     logger.error("resolve data from " + STORAGE_ENGINE_NODE_PREFIX + "/" + childName + " error");
                     continue;
@@ -484,7 +481,6 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 storageEngineMetaMap.putIfAbsent(storageEngineMeta.getId(), storageEngineMeta);
             }
 
-            registerMaxActiveEndTimeStatisticsListener();
             registerReshardStatusListener();
             registerReshardCounterListener();
             registerEnableTimeseriesMonitorListener();
@@ -535,8 +531,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                 .forPath(STORAGE_ENGINE_NODE, "".getBytes(StandardCharsets.UTF_8));
             long id = Long.parseLong(nodeName.substring(STORAGE_ENGINE_NODE.length()));
             storageEngine.setId(id);
-            String tmp = new String(JsonUtils.toJson(storageEngine));
-            this.client.setData().forPath(nodeName, tmp.getBytes());
+            this.client.setData().forPath(nodeName, JsonUtils.toJson(storageEngine));
             return id;
         } catch (Exception e) {
             throw new MetaStorageException("get error when add storage engine", e);
@@ -584,9 +579,10 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                         break;
                     }
                     data = event.getData().getData();
-                    logger.info("storage engine meta updated " + event.getData().getPath());
-                    logger.info("storage engine: " + new String(data));
-                    storageEngineMeta = JsonUtils.fromJson(JsonUtils.addType("tsInterval", new String(data).contains("timeSeries") ? "TimeSeriesPrefixRange" : "TimeSeriesInterval", data), StorageEngineMeta.class);
+                    logger.error("storage engine meta updated " + event.getData().getPath());
+                    logger.error("storage engine: " + new String(data));
+                    storageEngineMeta = JsonUtils.fromJson(data, StorageEngineMeta.class);
+                    logger.error("storageEngineMeta = {}", storageEngineMeta);
                     if (storageEngineMeta != null) {
                         logger.info("new storage engine comes to cluster: id = " + storageEngineMeta.getId() + " ,ip = " + storageEngineMeta.getIp() + " , port = " + storageEngineMeta.getPort());
                         storageChangeHook.onChange(storageEngineMeta.getId(), storageEngineMeta);
@@ -604,7 +600,7 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
                         System.exit(2);
                         break;
                     }
-                    storageEngineMeta = JsonUtils.fromJson(JsonUtils.addType("tsInterval", new String(data).contains("timeSeries") ? "TimeSeriesPrefixRange" : "TimeSeriesInterval", data), StorageEngineMeta.class);
+                    storageEngineMeta = JsonUtils.fromJson(data, StorageEngineMeta.class);
                     if (storageEngineMeta != null) {
                         logger.info("storage engine leave from cluster: id = " + storageEngineMeta.getId() + " ,ip = " + storageEngineMeta.getIp() + " , port = " + storageEngineMeta.getPort());
                         storageChangeHook.onChange(storageEngineMeta.getId(), null);
@@ -2191,35 +2187,6 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         this.reshardCounterChangeHook = hook;
     }
 
-    private void registerMaxActiveEndTimeStatisticsListener() throws Exception {
-        this.maxActiveEndTimeStatisticsCache = new TreeCache(this.client,
-            MAX_ACTIVE_END_TIME_STATISTICS_NODE_PREFIX);
-        TreeCacheListener listener = (curatorFramework, event) -> {
-            if (maxActiveEndTimeStatisticsChangeHook == null) {
-                return;
-            }
-            String path;
-            byte[] data;
-            long endTime;
-            switch (event.getType()) {
-                case NODE_ADDED:
-                case NODE_UPDATED:
-                    path = event.getData().getPath();
-                    data = event.getData().getData();
-                    String[] pathParts = path.split("/");
-                    if (pathParts.length == 7) {
-                        endTime = JsonUtils.fromJson(data, Long.class);
-                        maxActiveEndTimeStatisticsChangeHook.onChange(endTime);
-                    }
-                    break;
-                default:
-                    break;
-            }
-        };
-        this.maxActiveEndTimeStatisticsCache.getListenable().addListener(listener);
-        this.maxActiveEndTimeStatisticsCache.start();
-    }
-
     private void registerCustomizableReplicaFragmentListener() throws Exception {
         this.customizableReplicaFragmentCache = new TreeCache(this.client, CUSTOMIZABLE_REPLICA_FRAGMENT_NODE_PREFIX);
         TreeCacheListener listener = (curatorFramework, event) -> {
@@ -2321,12 +2288,6 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
         } finally {
             maxActiveEndTimeStatisticsMutexLock.unlock();
         }
-    }
-
-    @Override
-    public void registerMaxActiveEndTimeStatisticsChangeHook(
-        MaxActiveEndTimeStatisticsChangeHook hook) throws MetaStorageException {
-        this.maxActiveEndTimeStatisticsChangeHook = hook;
     }
 
     @Override

@@ -16,7 +16,7 @@ public class CompactionManager {
     private static final List<Compaction> compactionList = new ArrayList<>();
 
     static {
-        compactionList.add(new FragmentDeletionCompaction(PhysicalEngineImpl.getInstance(), DefaultMetaManager.getInstance()));
+//        compactionList.add(new FragmentDeletionCompaction(PhysicalEngineImpl.getInstance(), DefaultMetaManager.getInstance()));
         compactionList.add(new LowWriteFragmentCompaction(PhysicalEngineImpl.getInstance(), DefaultMetaManager.getInstance()));
         compactionList.add(new LowAccessFragmentCompaction(PhysicalEngineImpl.getInstance(), DefaultMetaManager.getInstance()));
     }
@@ -27,16 +27,20 @@ public class CompactionManager {
         return instance;
     }
 
-    public void clearFragment() throws Exception {
+    public void clearFragment() {
         logger.info("start to compact fragments");
-        if (ConfigDescriptor.getInstance().getConfig().isEnableInstantCompaction()) {
-            new InstantCompaction(PhysicalEngineImpl.getInstance(), DefaultMetaManager.getInstance()).compact();
-        } else {
-            for (Compaction compaction : compactionList) {
-                if (compaction.needCompaction()) {
-                    compaction.compact();
+        try {
+            if (ConfigDescriptor.getInstance().getConfig().isEnableInstantCompaction()) {
+                new InstantCompaction(PhysicalEngineImpl.getInstance(), DefaultMetaManager.getInstance()).compact();
+            } else if (ConfigDescriptor.getInstance().getConfig().isEnableFragmentCompaction()) {
+                for (Compaction compaction : compactionList) {
+                    if (compaction.needCompaction()) {
+                        compaction.compact();
+                    }
                 }
             }
+        } catch (Exception e) {
+            logger.error("compact fragment error: ", e);
         }
         logger.info("end compact fragments");
     }
