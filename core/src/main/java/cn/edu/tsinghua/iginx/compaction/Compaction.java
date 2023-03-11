@@ -40,6 +40,8 @@ public abstract class Compaction {
             if (o1.getTimeInterval().getStartTime() == o2.getTimeInterval().getStartTime()) {
                 if (o1.getTsInterval().getStartTimeSeries() == null) {
                     return -1;
+                } else if (o2.getTsInterval().getStartTimeSeries() == null) {
+                    return 1;
                 } else {
                     return o1.getTsInterval().getStartTimeSeries().compareTo(o2.getTsInterval().getStartTimeSeries());
                 }
@@ -122,8 +124,6 @@ public abstract class Compaction {
                 }
                 Migration migration = new Migration(new GlobalSource(), fragmentMeta, new ArrayList<>(pathSet), targetStorageUnit);
                 physicalEngine.execute(migration);
-                // 更新存储点数信息
-                metaManager.updateFragmentPoints(fragmentMeta, totalPoints);
             }
         }
         // TODO add write lock
@@ -132,13 +132,11 @@ public abstract class Compaction {
         FragmentMeta newFragment = new FragmentMeta(startTimeseries, endTimeseries, startTime, endTime, targetStorageUnit);
         logger.error("newFragment = {}", newFragment);
         metaManager.addFragment(newFragment);
+        // 更新存储点数信息
+        metaManager.updateFragmentPoints(newFragment, totalPoints);
 
         for (FragmentMeta fragmentMeta : fragmentGroup) {
-            String storageUnitId = fragmentMeta.getMasterStorageUnitId();
-            if (!storageUnitId.equals(targetStorageUnit.getId())) {
-                // 删除原分片元数据信息
-                metaManager.removeFragment(fragmentMeta);
-            }
+            metaManager.removeFragment(fragmentMeta);
         }
         // TODO release write lock
 

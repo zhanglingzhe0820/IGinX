@@ -883,12 +883,21 @@ public class ZooKeeperMetaStorage implements IMetaStorage {
     public void removeFragment(FragmentMeta fragmentMeta) throws MetaStorageException { // 只在有锁的情况下调用，内部不需要加锁
         try {
             this.client.delete().forPath(FRAGMENT_NODE_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString());
-            // 删除不需要的统计数据
-            this.client.delete().forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_WRITE + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString());
-            this.client.delete().forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString());
-            this.client.delete().forPath(STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString());
         } catch (Exception e) {
             throw new MetaStorageException("get error when remove fragment", e);
+        }
+        // 删除不需要的统计数据
+        try {
+            this.client.delete().forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_WRITE + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString());
+        } catch (Exception ignored) {
+        }
+        try {
+            this.client.delete().forPath(STATISTICS_FRAGMENT_REQUESTS_PREFIX_READ + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString());
+        } catch (Exception ignored) {
+        }
+        try {
+            this.client.delete().forPath(STATISTICS_FRAGMENT_POINTS_PREFIX + "/" + fragmentMeta.getTsInterval().toString() + "/" + fragmentMeta.getTimeInterval().toString());
+        } catch (Exception ignored) {
         }
     }
 

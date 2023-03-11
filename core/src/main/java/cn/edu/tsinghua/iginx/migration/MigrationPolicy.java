@@ -691,7 +691,7 @@ public abstract class MigrationPolicy {
                 for (Entry<TimeSeriesRange, FragmentMeta> entry : timeSeriesRangeFragmentMetaMap.entrySet()) {
                     TimeSeriesRange timeSeriesRange = entry.getKey();
                     FragmentMeta currFragmentMeta = entry.getValue();
-                    if (timeSeriesRange.getStartTimeSeries().equals(tsInterval.getStartTimeSeries()) && timeSeriesRange.getEndTimeSeries().equals(tsInterval.getEndTimeSeries())) {
+                    if (checkTimeseriesEqual(timeSeriesRange.getStartTimeSeries(), tsInterval.getStartTimeSeries()) && checkTimeseriesEqual(timeSeriesRange.getEndTimeSeries(), tsInterval.getEndTimeSeries())) {
                         if (sourceStorageId != targetStorageId) {
                             List<Long> storageEngineList = new ArrayList<>();
                             storageEngineList.add(targetStorageId);
@@ -721,9 +721,24 @@ public abstract class MigrationPolicy {
                 }
                 return result;
             }
-            return null;
+        } catch (Exception e) {
+            logger.error("reshardFragment error ", e);
         } finally {
             migrationLogger.logMigrationExecuteTaskEnd();
         }
+        return null;
+    }
+
+    private boolean checkTimeseriesEqual(String timeseries1, String timeseries2) {
+        try {
+            if (timeseries1 == null && timeseries2 == null) {
+                return true;
+            } else if (timeseries1.equals(timeseries2)) {
+                return true;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return false;
     }
 }
