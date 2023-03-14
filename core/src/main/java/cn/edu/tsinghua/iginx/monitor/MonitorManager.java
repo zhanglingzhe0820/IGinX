@@ -94,8 +94,6 @@ public class MonitorManager implements Runnable {
 
             logger.error("start to scale in nodes = {}", toScaleInNodes);
             logger.error("start to scale in fragmentOfEachNode = {}", fragmentOfEachNode);
-            logger.error("fragmentHeatWriteMap = {}", fragmentHeatWriteMap);
-            logger.error("fragmentHeatReadMap = {}", fragmentHeatReadMap);
 //            if (DefaultMetaManager.getInstance().executeReshard()) {
             //发起负载均衡
             policy.executeReshardAndMigration(fragmentMetaPointsMap, fragmentOfEachNode,
@@ -199,8 +197,8 @@ public class MonitorManager implements Runnable {
                         List<FragmentMeta> fragmentMetas = fragmentOfEachNodeEntry.getValue();
                         for (FragmentMeta fragmentMeta : fragmentMetas) {
                             logger.error("fragment: {}", fragmentMeta.toString());
-                            logger.error("fragment heat read: {} = {}", fragmentMeta,
-                                fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
+                            logger.error("fragment heat read: = {}", fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
+                            logger.error("fragment heat write: = {}", fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L));
                             heat += fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
                             heat += fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
                             requests += writeRequestsMap.getOrDefault(fragmentMeta, 0L);
@@ -208,7 +206,11 @@ public class MonitorManager implements Runnable {
                         }
                         logger.error("heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
                         logger.error("requests of node {} : {}", fragmentOfEachNodeEntry.getKey(), requests);
-                        nodeLatencyMap.put(fragmentOfEachNodeEntry.getKey(), heat * 1.0 / requests);
+                        if (requests != 0) {
+                            nodeLatencyMap.put(fragmentOfEachNodeEntry.getKey(), heat * 1.0 / requests);
+                        } else {
+                            nodeLatencyMap.put(fragmentOfEachNodeEntry.getKey(), 0.0);
+                        }
 
                         totalHeats += heat;
                         maxHeat = Math.max(maxHeat, heat);
@@ -273,7 +275,11 @@ public class MonitorManager implements Runnable {
 
         for (Entry<Long, List<FragmentMeta>> fragmentOfEachNodeEntry : fragmentOfEachNode.entrySet()) {
             long nodeId = fragmentOfEachNodeEntry.getKey();
-            double adjustRatio = maxLatency / nodeLatencyMap.get(nodeId);
+            double latency = nodeLatencyMap.get(nodeId);
+            double adjustRatio = 1.0;
+            if (maxLatency != 0) {
+                adjustRatio = latency / maxLatency;
+            }
             List<FragmentMeta> fragmentMetas = fragmentOfEachNodeEntry.getValue();
             for (FragmentMeta fragmentMeta : fragmentMetas) {
                 long writeHeat = fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
@@ -284,7 +290,7 @@ public class MonitorManager implements Runnable {
                 long readHeat = fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
                 if (readHeat > 0) {
                     readHeat = (long) (readHeat * adjustRatio);
-                    fragmentHeatWriteMap.put(fragmentMeta, readHeat);
+                    fragmentHeatReadMap.put(fragmentMeta, readHeat);
                 }
             }
         }

@@ -585,7 +585,7 @@ public abstract class MigrationPolicy {
                         migrateData(migrationTask.getSourceStorageId(),
                             migrationTask.getTargetStorageId(),
                             migrationTask.getFragmentMeta());
-                    } else if (migrationTask.getMigrationType() == MigrationType.WHOLE) {
+                    } else if (migrationTask.getMigrationType() == MigrationType.WRITE) {
                         this.logger.error("start to migrate write data: {}", migrationTask);
                         reshardFragment(migrationTask.getSourceStorageId(),
                             migrationTask.getTargetStorageId(),

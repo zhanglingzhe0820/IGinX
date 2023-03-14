@@ -318,6 +318,9 @@ public class DynamicPolicy implements IPolicy {
                 }
             }
 
+            logger.error("maxLoad = {}", maxLoad);
+            logger.error("maxWriteLoad = {}", maxWriteLoad);
+            logger.error("maxReadLoad = {}", maxReadLoad);
             if (maxWriteLoadFragment != null || maxReadLoadFragment != null) {
                 if (maxLoad < Math.max(maxWriteLoad, maxReadLoad)) {
                     if (maxWriteLoad >= maxReadLoad) {
