@@ -26,8 +26,11 @@ public class MonitorManager implements Runnable {
         .getUnbalanceThreshold();
     private final IPolicy policy = PolicyManager.getInstance()
         .getPolicy(ConfigDescriptor.getInstance().getConfig().getPolicyClassName());
+
     private final int fragmentClearTime = 10;
     private long currLoopTime = 0;
+
+    private final boolean isAdjustByAverageLatency = true;
 
     private boolean isScaleIn = false;
 
@@ -188,26 +191,24 @@ public class MonitorManager implements Runnable {
                     long maxHeat = 0;
                     long minHeat = Long.MAX_VALUE;
 //        logger.error("start to print all fragments of each node");
+                    Map<Long, Double> nodeLatencyMap = new HashMap<>();
                     for (Entry<Long, List<FragmentMeta>> fragmentOfEachNodeEntry : fragmentOfEachNode
                         .entrySet()) {
                         long heat = 0;
                         long requests = 0;
                         List<FragmentMeta> fragmentMetas = fragmentOfEachNodeEntry.getValue();
                         for (FragmentMeta fragmentMeta : fragmentMetas) {
-//                        logger.error("fragment: {}", fragmentMeta.toString());
-//                        logger.error("fragment heat write: {} = {}", fragmentMeta,
-//                            fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L));
-                            heat += fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
-                            logger.error("fragment heat: {} = {}", fragmentMeta,
+                            logger.error("fragment: {}", fragmentMeta.toString());
+                            logger.error("fragment heat read: {} = {}", fragmentMeta,
                                 fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
-                            logger.error("fragment request: {} = {}", fragmentMeta,
-                                readRequestsMap.getOrDefault(fragmentMeta, 0L));
+                            heat += fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
                             heat += fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
                             requests += writeRequestsMap.getOrDefault(fragmentMeta, 0L);
                             requests += readRequestsMap.getOrDefault(fragmentMeta, 0L);
                         }
                         logger.error("heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
                         logger.error("requests of node {} : {}", fragmentOfEachNodeEntry.getKey(), requests);
+                        nodeLatencyMap.put(fragmentOfEachNodeEntry.getKey(), heat * 1.0 / requests);
 
                         totalHeats += heat;
                         maxHeat = Math.max(maxHeat, heat);
@@ -215,6 +216,27 @@ public class MonitorManager implements Runnable {
                     }
 //        logger.error("end print all fragments of each node");
                     double averageHeats = totalHeats * 1.0 / fragmentOfEachNode.size();
+                    if (isAdjustByAverageLatency) {
+                        updateHeatByAverageLatency(nodeLatencyMap, fragmentOfEachNode, fragmentHeatWriteMap, fragmentHeatReadMap);
+                        totalHeats = 0;
+                        maxHeat = 0;
+                        minHeat = Long.MAX_VALUE;
+                        for (Entry<Long, List<FragmentMeta>> fragmentOfEachNodeEntry : fragmentOfEachNode
+                            .entrySet()) {
+                            long heat = 0;
+                            List<FragmentMeta> fragmentMetas = fragmentOfEachNodeEntry.getValue();
+                            for (FragmentMeta fragmentMeta : fragmentMetas) {
+                                heat += fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
+                                heat += fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
+                            }
+                            logger.error("updated heat of node {} : {}", fragmentOfEachNodeEntry.getKey(), heat);
+
+                            totalHeats += heat;
+                            maxHeat = Math.max(maxHeat, heat);
+                            minHeat = Math.min(minHeat, heat);
+                        }
+                        averageHeats = totalHeats * 1.0 / fragmentOfEachNode.size();
+                    }
 
                     if (ConfigDescriptor.getInstance().getConfig().isEnableDynamicMigration()) {
                         if (((1 - unbalanceThreshold) * averageHeats >= minHeat
@@ -235,6 +257,35 @@ public class MonitorManager implements Runnable {
                 logger.error("monitor manager error ", e);
             } finally {
 //                DefaultMetaManager.getInstance().doneReshard();
+            }
+        }
+    }
+
+    // 根据平均延迟调整各个节点的负载值
+    private void updateHeatByAverageLatency(Map<Long, Double> nodeLatencyMap,
+                                            Map<Long, List<FragmentMeta>> fragmentOfEachNode,
+                                            Map<FragmentMeta, Long> fragmentHeatWriteMap,
+                                            Map<FragmentMeta, Long> fragmentHeatReadMap) {
+        double maxLatency = 0;
+        for (Double latency : nodeLatencyMap.values()) {
+            maxLatency = Math.max(maxLatency, latency);
+        }
+
+        for (Entry<Long, List<FragmentMeta>> fragmentOfEachNodeEntry : fragmentOfEachNode.entrySet()) {
+            long nodeId = fragmentOfEachNodeEntry.getKey();
+            double adjustRatio = maxLatency / nodeLatencyMap.get(nodeId);
+            List<FragmentMeta> fragmentMetas = fragmentOfEachNodeEntry.getValue();
+            for (FragmentMeta fragmentMeta : fragmentMetas) {
+                long writeHeat = fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
+                if (writeHeat > 0) {
+                    writeHeat = (long) (writeHeat * adjustRatio);
+                    fragmentHeatWriteMap.put(fragmentMeta, writeHeat);
+                }
+                long readHeat = fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
+                if (readHeat > 0) {
+                    readHeat = (long) (readHeat * adjustRatio);
+                    fragmentHeatWriteMap.put(fragmentMeta, readHeat);
+                }
             }
         }
     }

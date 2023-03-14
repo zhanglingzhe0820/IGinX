@@ -62,10 +62,10 @@ public class AnalyzeMonitorManager implements Runnable {
                         writeRequests += writeRequestsMap.getOrDefault(fragmentMeta, 0L);
                         readRequests += readRequestsMap.getOrDefault(fragmentMeta, 0L);
                     }
-//                    logger.error("write heat with migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeHeat);
-//                    logger.error("read heat with migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readHeat);
-//                    logger.error("write requests with migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeRequests);
-//                    logger.error("read requests with migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readRequests);
+                    logger.error("write heat with migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeHeat);
+                    logger.error("read heat with migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readHeat);
+                    logger.error("write requests with migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeRequests);
+                    logger.error("read requests with migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readRequests);
                 }
 
                 Map<FragmentMeta, Long> writeRequestsNoMigrationMap = AnalyzeRequestsMonitor.getInstance()
@@ -87,10 +87,10 @@ public class AnalyzeMonitorManager implements Runnable {
                         writeRequests += writeRequestsNoMigrationMap.getOrDefault(fragmentMeta, 0L);
                         readRequests += readRequestsNoMigrationMap.getOrDefault(fragmentMeta, 0L);
                     }
-//                    logger.error("write heat without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeHeat);
-//                    logger.error("read heat without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readHeat);
-//                    logger.error("write requests without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeRequests);
-//                    logger.error("read requests without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readRequests);
+                    logger.error("write heat without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeHeat);
+                    logger.error("read heat without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readHeat);
+                    logger.error("write requests without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), writeRequests);
+                    logger.error("read requests without migration of node {} : {}", fragmentOfEachNodeEntry.getKey(), readRequests);
                 }
                 logger.error("curr fragment num: {}", DefaultMetaManager.getInstance().getFragments().size());
             } catch (Exception e) {
