@@ -64,7 +64,9 @@ public class InsertGenerator extends AbstractGenerator {
             //on scale-out or any events requiring reallocation
             logger.debug("Trig ReAllocate!");
             Pair<List<FragmentMeta>, List<StorageUnitMeta>> fragmentsAndStorageUnits = policy.generateFragmentsAndStorageUnits(insertStatement);
-            metaManager.createFragmentsAndStorageUnits(fragmentsAndStorageUnits.v, fragmentsAndStorageUnits.k);
+            if (!fragmentsAndStorageUnits.getV().isEmpty()) {
+                metaManager.createFragmentsAndStorageUnits(fragmentsAndStorageUnits.v, fragmentsAndStorageUnits.k);
+            }
         }
 
         RawData rawData = insertStatement.getRawData();

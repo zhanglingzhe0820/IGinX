@@ -125,6 +125,8 @@ public class Config {
 
     private String clients = "";
 
+    private String fragments = "";
+
     private int instancesNumPerClient = 0;
 
     private String queryOptimizer = "";
@@ -589,6 +591,14 @@ public class Config {
 
     public void setClients(String clients) {
         this.clients = clients;
+    }
+
+    public String getFragments() {
+        return fragments;
+    }
+
+    public void setFragments(String fragments) {
+        this.fragments = fragments;
     }
 
     public int getInstancesNumPerClient() {

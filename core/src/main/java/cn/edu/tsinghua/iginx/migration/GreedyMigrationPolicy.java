@@ -29,6 +29,7 @@ public class GreedyMigrationPolicy extends MigrationPolicy {
     long startTime = System.currentTimeMillis();
 
     logger.error("start to migrate and calculateNodeLoadMap");
+    executeAllWriteMigrationTask(migrationTasks);
     Map<Long, Long> nodeLoadMap = calculateNodeLoadMap(nodeFragmentMap, fragmentWriteLoadMap,
         fragmentReadLoadMap);
     logger.error("start to createParallelQueueByPriority");

@@ -41,6 +41,8 @@ public interface IMetaCache {
 
     void deleteFragmentByTsInterval(TimeSeriesRange tsInterval, FragmentMeta fragmentMeta);
 
+    FragmentMeta getFragmentByExactTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval, TimeInterval timeInterval);
+
     List<FragmentMeta> getFragmentMapByExactTimeSeriesInterval(TimeSeriesRange tsInterval);
 
     Map<TimeSeriesRange, List<FragmentMeta>> getFragmentMapByTimeSeriesInterval(TimeSeriesRange tsInterval);

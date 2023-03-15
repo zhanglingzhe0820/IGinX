@@ -320,7 +320,7 @@ public class DefaultMetaCache implements IMetaCache {
 
     @Override
     public void updateFragmentByTsInterval(TimeSeriesRange tsInterval,
-        FragmentMeta fragmentMeta) {
+                                           FragmentMeta fragmentMeta) {
         fragmentLock.writeLock().lock();
         try {
             // 更新 fragmentMetaListMap
@@ -376,7 +376,7 @@ public class DefaultMetaCache implements IMetaCache {
     public List<FragmentMeta> getDummyFragmentsByTimeSeriesInterval(TimeSeriesRange tsInterval) {
         fragmentLock.readLock().lock();
         List<FragmentMeta> results = new ArrayList<>();
-        for (FragmentMeta fragmentMeta: dummyFragments) {
+        for (FragmentMeta fragmentMeta : dummyFragments) {
             if (fragmentMeta.isValid() && fragmentMeta.getTsInterval().isIntersect(tsInterval)) {
                 results.add(fragmentMeta);
             }
@@ -423,7 +423,7 @@ public class DefaultMetaCache implements IMetaCache {
     public List<FragmentMeta> getDummyFragmentsByTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval, TimeInterval timeInterval) {
         fragmentLock.readLock().lock();
         List<FragmentMeta> results = new ArrayList<>();
-        for (FragmentMeta fragmentMeta: dummyFragments) {
+        for (FragmentMeta fragmentMeta : dummyFragments) {
             if (fragmentMeta.isValid() && fragmentMeta.getTsInterval().isIntersect(tsInterval) && fragmentMeta.getTimeInterval().isIntersect(timeInterval)) {
                 results.add(fragmentMeta);
             }
@@ -460,12 +460,31 @@ public class DefaultMetaCache implements IMetaCache {
     }
 
     @Override
+    public FragmentMeta getFragmentByExactTimeSeriesIntervalAndTimeInterval(TimeSeriesRange tsInterval, TimeInterval timeInterval) {
+        List<FragmentMeta> res = fragmentMetaListMap.getOrDefault(tsInterval, new ArrayList<>());
+        // 对象不匹配的情况需要手动匹配（?）
+        if (res.size() == 0) {
+            for (Map.Entry<TimeSeriesRange, List<FragmentMeta>> fragmentMetaListEntry : fragmentMetaListMap
+                .entrySet()) {
+                if (fragmentMetaListEntry.getKey().toString().equals(tsInterval.toString())) {
+                    for (FragmentMeta fragmentMeta : fragmentMetaListEntry.getValue()) {
+                        if (fragmentMeta.getTimeInterval().getStartTime() == timeInterval.getStartTime() && fragmentMeta.getTimeInterval().getEndTime() == timeInterval.getEndTime()) {
+                            return fragmentMeta;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    @Override
     public List<FragmentMeta> getFragmentMapByExactTimeSeriesInterval(TimeSeriesRange tsInterval) {
         List<FragmentMeta> res = fragmentMetaListMap.getOrDefault(tsInterval, new ArrayList<>());
         // 对象不匹配的情况需要手动匹配（?）
         if (res.size() == 0) {
             for (Map.Entry<TimeSeriesRange, List<FragmentMeta>> fragmentMetaListEntry : fragmentMetaListMap
-                    .entrySet()) {
+                .entrySet()) {
                 if (fragmentMetaListEntry.getKey().toString().equals(tsInterval.toString())) {
                     return fragmentMetaListEntry.getValue();
                 }
@@ -533,7 +552,7 @@ public class DefaultMetaCache implements IMetaCache {
         return new ArrayList<>();
     }
 
-    public Map<FragmentMeta, List<FragmentMeta>> getAllCustomizableReplicaFragmentList(){
+    public Map<FragmentMeta, List<FragmentMeta>> getAllCustomizableReplicaFragmentList() {
         return customizableReplicaFragmentMetaList;
     }
 
@@ -700,7 +719,7 @@ public class DefaultMetaCache implements IMetaCache {
     public List<FragmentMeta> getFragments() {
         List<FragmentMeta> fragments = new ArrayList<>();
         this.fragmentLock.readLock().lock();
-        for (Pair<TimeSeriesRange, List<FragmentMeta>> pair: sortedFragmentMetaLists) {
+        for (Pair<TimeSeriesRange, List<FragmentMeta>> pair : sortedFragmentMetaLists) {
             fragments.addAll(pair.v);
         }
         this.fragmentLock.readLock().unlock();

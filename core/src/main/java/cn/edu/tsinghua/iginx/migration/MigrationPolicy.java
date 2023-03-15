@@ -21,16 +21,8 @@ import cn.edu.tsinghua.iginx.policy.IPolicy;
 import cn.edu.tsinghua.iginx.policy.PolicyManager;
 import cn.edu.tsinghua.iginx.utils.Pair;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Queue;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 
 import org.slf4j.Logger;
@@ -671,6 +663,51 @@ public abstract class MigrationPolicy {
         }
     }
 
+    protected synchronized void executeAllWriteMigrationTask(List<MigrationTask> migrationTasks) {
+        try {
+            long middleTime = DefaultMetaManager.getInstance().getMaxActiveEndTime();
+            // 时间维度必须对齐，因此切一个就必须全切
+            Map<TimeSeriesRange, FragmentMeta> timeSeriesRangeFragmentMetaMap = DefaultMetaManager.getInstance().getLatestFragmentMap();
+            for (Entry<TimeSeriesRange, FragmentMeta> entry : timeSeriesRangeFragmentMetaMap.entrySet()) {
+                TimeSeriesRange timeSeriesRange = entry.getKey();
+                FragmentMeta currFragmentMeta = entry.getValue();
+                Iterator<MigrationTask> migrationTaskIterable = migrationTasks.iterator();
+                boolean isInMigrationTask = false;
+                while (migrationTaskIterable.hasNext()) {
+                    MigrationTask migrationTask = migrationTaskIterable.next();
+                    TimeSeriesRange tsInterval = migrationTask.getFragmentMeta().getTsInterval();
+                    if (checkTimeseriesEqual(timeSeriesRange.getStartTimeSeries(), tsInterval.getStartTimeSeries()) && checkTimeseriesEqual(timeSeriesRange.getEndTimeSeries(), tsInterval.getEndTimeSeries())) {
+                        List<Long> storageEngineList = new ArrayList<>();
+                        storageEngineList.add(migrationTask.getTargetStorageId());
+                        Pair<FragmentMeta, StorageUnitMeta> fragmentMetaStorageUnitMetaPair = policy
+                            .generateFragmentAndStorageUnitByTimeSeriesIntervalAndTimeInterval(
+                                tsInterval.getStartTimeSeries(), tsInterval.getEndTimeSeries(),
+                                middleTime, Long.MAX_VALUE,
+                                storageEngineList);
+                        DefaultMetaManager.getInstance()
+                            .splitFragmentAndStorageUnit(fragmentMetaStorageUnitMetaPair.getV(),
+                                fragmentMetaStorageUnitMetaPair.getK(), migrationTask.getFragmentMeta());
+                        migrationTaskIterable.remove();
+                        isInMigrationTask = true;
+                        break;
+                    }
+                }
+                if (!isInMigrationTask) {
+                    // 保留在原节点
+                    logger.error("reshard fragment = {}", currFragmentMeta);
+                    logger.error("middle time = {}", middleTime);
+                    if (middleTime > currFragmentMeta.getTimeInterval().getStartTime()) {
+                        DefaultMetaManager.getInstance().endFragmentByTimeInterval(currFragmentMeta, middleTime);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("reshardFragment error ", e);
+        } finally {
+            migrationLogger.logMigrationExecuteTaskEnd();
+        }
+    }
+
     private synchronized FragmentMeta reshardFragment(long sourceStorageId, long targetStorageId,
                                                       FragmentMeta fragmentMeta) {
         try {
@@ -693,16 +730,18 @@ public abstract class MigrationPolicy {
                     FragmentMeta currFragmentMeta = entry.getValue();
                     if (checkTimeseriesEqual(timeSeriesRange.getStartTimeSeries(), tsInterval.getStartTimeSeries()) && checkTimeseriesEqual(timeSeriesRange.getEndTimeSeries(), tsInterval.getEndTimeSeries())) {
                         if (sourceStorageId != targetStorageId) {
-                            List<Long> storageEngineList = new ArrayList<>();
-                            storageEngineList.add(targetStorageId);
-                            Pair<FragmentMeta, StorageUnitMeta> fragmentMetaStorageUnitMetaPair = policy
-                                .generateFragmentAndStorageUnitByTimeSeriesIntervalAndTimeInterval(
-                                    tsInterval.getStartTimeSeries(), tsInterval.getEndTimeSeries(),
-                                    middleTime, Long.MAX_VALUE,
-                                    storageEngineList);
-                            result = DefaultMetaManager.getInstance()
-                                .splitFragmentAndStorageUnit(fragmentMetaStorageUnitMetaPair.getV(),
-                                    fragmentMetaStorageUnitMetaPair.getK(), fragmentMeta);
+                            if (middleTime > currFragmentMeta.getTimeInterval().getStartTime()) {
+                                List<Long> storageEngineList = new ArrayList<>();
+                                storageEngineList.add(targetStorageId);
+                                Pair<FragmentMeta, StorageUnitMeta> fragmentMetaStorageUnitMetaPair = policy
+                                    .generateFragmentAndStorageUnitByTimeSeriesIntervalAndTimeInterval(
+                                        tsInterval.getStartTimeSeries(), tsInterval.getEndTimeSeries(),
+                                        middleTime, Long.MAX_VALUE,
+                                        storageEngineList);
+                                result = DefaultMetaManager.getInstance()
+                                    .splitFragmentAndStorageUnit(fragmentMetaStorageUnitMetaPair.getV(),
+                                        fragmentMetaStorageUnitMetaPair.getK(), fragmentMeta);
+                            }
                         } else {
                             if (middleTime > currFragmentMeta.getTimeInterval().getStartTime()) {
                                 result = DefaultMetaManager.getInstance().endFragmentByTimeInterval(currFragmentMeta, middleTime);

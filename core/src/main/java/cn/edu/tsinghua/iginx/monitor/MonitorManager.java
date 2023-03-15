@@ -30,7 +30,7 @@ public class MonitorManager implements Runnable {
     private final int fragmentClearTime = 10;
     private long currLoopTime = 0;
 
-    private final boolean isAdjustByAverageLatency = true;
+    private final boolean isAdjustByAverageLatency = false;
 
     private boolean isScaleIn = false;
 
@@ -297,37 +297,37 @@ public class MonitorManager implements Runnable {
     }
 
     private Map<FragmentMeta, Long> filterAndGetHeatMap(List<Pair<FragmentMeta, Long>> soredCostList) {
-        if (soredCostList.size() >= 10) {
-            double removeHighPercent = 0.95; // 保留大于等于P99的数据
-            double removeHighHeatTimes = 10; // 保留小于10倍的平均延迟的数据
-            double removeLowPercent = 0.05; // 保留大于等于P1的数据
-            double removeLowHeatTimes = 0.1; // 保留大于0.1倍的平均延迟的数据
-
-            long totalHeat = 0L;
-            List<Long> heatList = new ArrayList<>();
-            Iterator<Pair<FragmentMeta, Long>> soredCostIterator = soredCostList.iterator();
-            while (soredCostIterator.hasNext()) {
-                long latency = soredCostIterator.next().getV();
-                if (latency == 0) {
-                    soredCostIterator.remove();
-                }
-                totalHeat += latency;
-                heatList.add(latency);
-            }
-
-            double averageLatency = totalHeat * 1.0 / soredCostList.size();
-            double highPercentLatency = soredCostList.get((int) Math.floor(soredCostList.size() * removeHighPercent)).getV();
-            double lowPercentLatency = soredCostList.get((int) Math.ceil(soredCostList.size() * removeLowPercent)).getV();
-            soredCostIterator = soredCostList.iterator();
-            while (soredCostIterator.hasNext()) {
-                long latency = soredCostIterator.next().getV();
-                if (latency < lowPercentLatency || latency < averageLatency * removeLowHeatTimes) {
-                    soredCostIterator.remove();
-                } else if (latency > highPercentLatency || latency > averageLatency * removeHighHeatTimes) {
-                    soredCostIterator.remove();
-                }
-            }
-        }
+//        if (soredCostList.size() >= 10) {
+//            double removeHighPercent = 0.95; // 保留大于等于P99的数据
+//            double removeHighHeatTimes = 10; // 保留小于10倍的平均延迟的数据
+//            double removeLowPercent = 0.05; // 保留大于等于P1的数据
+//            double removeLowHeatTimes = 0.1; // 保留大于0.1倍的平均延迟的数据
+//
+//            long totalHeat = 0L;
+//            List<Long> heatList = new ArrayList<>();
+//            Iterator<Pair<FragmentMeta, Long>> soredCostIterator = soredCostList.iterator();
+//            while (soredCostIterator.hasNext()) {
+//                long latency = soredCostIterator.next().getV();
+//                if (latency == 0) {
+//                    soredCostIterator.remove();
+//                }
+//                totalHeat += latency;
+//                heatList.add(latency);
+//            }
+//
+//            double averageLatency = totalHeat * 1.0 / soredCostList.size();
+//            double highPercentLatency = soredCostList.get((int) Math.floor(soredCostList.size() * removeHighPercent)).getV();
+//            double lowPercentLatency = soredCostList.get((int) Math.ceil(soredCostList.size() * removeLowPercent)).getV();
+//            soredCostIterator = soredCostList.iterator();
+//            while (soredCostIterator.hasNext()) {
+//                long latency = soredCostIterator.next().getV();
+//                if (latency < lowPercentLatency || latency < averageLatency * removeLowHeatTimes) {
+//                    soredCostIterator.remove();
+//                } else if (latency > highPercentLatency || latency > averageLatency * removeHighHeatTimes) {
+//                    soredCostIterator.remove();
+//                }
+//            }
+//        }
 
         Map<FragmentMeta, Long> result = new HashMap<>();
         for (Pair<FragmentMeta, Long> pair : soredCostList) {

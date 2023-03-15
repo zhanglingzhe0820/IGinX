@@ -30,6 +30,7 @@ public class SimulationBasedMigrationPolicy extends MigrationPolicy {
       Map<FragmentMeta, Long> fragmentWriteLoadMap, Map<FragmentMeta, Long> fragmentReadLoadMap) {
     long startTime = System.currentTimeMillis();
 
+    executeAllWriteMigrationTask(migrationTasks);
     Map<Long, Long> nodeLoadMap = calculateNodeLoadMap(nodeFragmentMap, fragmentWriteLoadMap,
         fragmentReadLoadMap);
     List<List<Queue<MigrationTask>>> candidateMigrationTaskQueueList = createParallelQueueWithoutPriority(
