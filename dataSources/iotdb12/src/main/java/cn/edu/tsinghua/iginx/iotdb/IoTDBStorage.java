@@ -246,7 +246,7 @@ public class IoTDBStorage implements IStorage {
         List<Timeseries> timeseries = new ArrayList<>();
         try {
             SessionDataSetWrapper dataSet = sessionPool.executeQueryStatement(SHOW_TIMESERIES);
-            while(dataSet.hasNext()) {
+            while (dataSet.hasNext()) {
                 RowRecord record = dataSet.next();
                 if (record == null || record.getFields().size() < 4) {
                     continue;
@@ -301,7 +301,7 @@ public class IoTDBStorage implements IStorage {
             RowStream rowStream = new ClearEmptyRowStreamWrapper(new IoTDBQueryRowStream(sessionPool.executeQueryStatement(statement), true, project));
             return new TaskExecuteResult(rowStream);
         } catch (IoTDBConnectionException | StatementExecutionException e) {
-            logger.error(e.getMessage());
+            logger.error("execute project task in iotdb12 failure", e);
             return new TaskExecuteResult(new PhysicalTaskExecuteFailureException("execute project task in iotdb12 failure", e));
         }
     }
@@ -427,7 +427,7 @@ public class IoTDBStorage implements IStorage {
                 tablet.reset();
             }
             cnt += size;
-        } while(cnt < data.getTimeSize());
+        } while (cnt < data.getTimeSize());
 
         return null;
     }
@@ -506,7 +506,7 @@ public class IoTDBStorage implements IStorage {
                 }
             }
             cnt += size;
-        } while(cnt < data.getTimeSize());
+        } while (cnt < data.getTimeSize());
 
         return null;
     }
@@ -581,7 +581,7 @@ public class IoTDBStorage implements IStorage {
                 tablet.reset();
             }
             cnt += size;
-        } while(cnt < data.getTimeSize());
+        } while (cnt < data.getTimeSize());
 
         return null;
     }
@@ -651,7 +651,7 @@ public class IoTDBStorage implements IStorage {
                     tablet.reset();
                 }
                 cnt += size;
-            } while(cnt < data.getTimeSize());
+            } while (cnt < data.getTimeSize());
         }
         return null;
     }
@@ -676,7 +676,7 @@ public class IoTDBStorage implements IStorage {
                     logger.warn("encounter error when delete path: " + e.getMessage());
                     return new TaskExecuteResult(new PhysicalTaskExecuteFailureException("execute delete path task in iotdb11 failure", e));
                 }
-                for (String path: deletedPaths) {
+                for (String path : deletedPaths) {
                     try {
                         sessionPool.executeNonQueryStatement(String.format(DELETE_TIMESERIES_CLAUSE, path));
                     } catch (IoTDBConnectionException | StatementExecutionException e) {
@@ -691,7 +691,7 @@ public class IoTDBStorage implements IStorage {
             try {
                 List<String> paths = determineDeletePathList(storageUnit, delete);
                 if (paths.size() != 0) {
-                    for (TimeRange timeRange: delete.getTimeRanges()) {
+                    for (TimeRange timeRange : delete.getTimeRanges()) {
                         sessionPool.deleteData(paths, timeRange.getActualBeginTime(), timeRange.getActualEndTime());
                     }
                 }
@@ -714,7 +714,7 @@ public class IoTDBStorage implements IStorage {
             List<Timeseries> timeSeries = getTimeSeries();
 
             List<String> pathList = new ArrayList<>();
-            for (Timeseries ts: timeSeries) {
+            for (Timeseries ts : timeSeries) {
                 for (String pattern : patterns) {
                     if (Pattern.matches(StringUtils.reformatPath(pattern), ts.getPath()) &&
                         TagKVUtils.match(ts.getTags(), tagFilter)) {

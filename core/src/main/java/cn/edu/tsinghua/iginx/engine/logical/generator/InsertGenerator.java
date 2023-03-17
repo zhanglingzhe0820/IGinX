@@ -58,6 +58,7 @@ public class InsertGenerator extends AbstractGenerator {
             //on startup
             policy.setNeedReAllocate(false);
             Pair<List<FragmentMeta>, List<StorageUnitMeta>> fragmentsAndStorageUnits = policy.generateInitialFragmentsAndStorageUnits(insertStatement);
+            logger.error("fragmentsAndStorageUnits = {}", fragmentsAndStorageUnits);
             metaManager.createInitialFragmentsAndStorageUnits(fragmentsAndStorageUnits.v, fragmentsAndStorageUnits.k);
             fragments = metaManager.getFragmentMapByTimeSeriesInterval(tsInterval);
         } else if (policy.isNeedReAllocate()) {

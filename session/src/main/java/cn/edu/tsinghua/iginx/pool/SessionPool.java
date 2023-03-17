@@ -44,7 +44,7 @@ public class SessionPool {
     private static final int THREAD_NUMBER_MINSIZE = 1;
 
     private static final int MAXSIZE = 10;
-    private static long WAITTOGETSESSIONTIMEOUTINMS = 60_000;
+    private static long WAITTOGETSESSIONTIMEOUTINMS = 60_000000;
     private static int DEFAULTMAXSIZE = 5;
 
     private List<IginxInfo> iginxList;
