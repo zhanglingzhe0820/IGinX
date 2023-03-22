@@ -107,22 +107,7 @@ public abstract class Compaction {
             String storageUnitId = fragmentMeta.getMasterStorageUnitId();
             if (!storageUnitId.equals(targetStorageUnit.getId())) {
                 // 重写该分片的数据
-                Set<String> pathRegexSet = new HashSet<>();
-                ShowTimeSeries showTimeSeries = new ShowTimeSeries(new GlobalSource(),
-                    pathRegexSet, null, Integer.MAX_VALUE, 0);
-                RowStream rowStream = physicalEngine.execute(showTimeSeries);
-                SortedSet<String> pathSet = new TreeSet<>();
-                while (rowStream != null && rowStream.hasNext()) {
-                    Row row = rowStream.next();
-                    String timeSeries = new String((byte[]) row.getValue(0));
-                    if (timeSeries.contains("{") && timeSeries.contains("}")) {
-                        timeSeries = timeSeries.split("\\{")[0];
-                    }
-                    if (fragmentMeta.getTsInterval().isContain(timeSeries)) {
-                        pathSet.add(timeSeries);
-                    }
-                }
-                Migration migration = new Migration(new GlobalSource(), fragmentMeta, new ArrayList<>(pathSet), targetStorageUnit);
+                Migration migration = new Migration(new GlobalSource(), fragmentMeta, targetStorageUnit);
                 physicalEngine.execute(migration);
             }
         }

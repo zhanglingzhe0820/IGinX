@@ -105,36 +105,34 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 for (StorageUnitMeta storageUnitMeta : targetReplicaStorageUnitMetaList) {
                     storageUnitIds.add(storageUnitMeta.getId());
                 }
-                TimeInterval timeInterval = toMigrateFragment.getTimeInterval();
-                List<String> paths = migration.getPaths();
 
                 // 查询分区数据
                 List<Operator> operators = new ArrayList<>();
-                Project project = new Project(new FragmentSource(toMigrateFragment), paths, null);
+                Project project = new Project(new FragmentSource(toMigrateFragment), Collections.singletonList("*"), null);
                 operators.add(project);
-
-                List<Filter> selectTimeFilters = new ArrayList<>();
-                selectTimeFilters.add(new KeyFilter(Op.GE, timeInterval.getStartTime()));
-                selectTimeFilters.add(new KeyFilter(Op.L, timeInterval.getEndTime()));
-                Select select = new Select(new OperatorSource(project), new AndFilter(selectTimeFilters), null);
-                operators.add(select);
                 StoragePhysicalTask physicalTask = new StoragePhysicalTask(operators);
                 physicalTask.setMigration(true);
 
-                if (migration.getFragmentMeta().getMasterStorageUnitId() != null) {
-                    storageTaskExecutor.commitWithTargetStorageUnitId(physicalTask, migration.getFragmentMeta().getMasterStorageUnitId());
-                } else {
-                    storageTaskExecutor.commit(physicalTask);
-                }
+                RowStream selectRowStream = null;
+                while (selectRowStream == null) {
+                    if (migration.getFragmentMeta().getMasterStorageUnitId() != null) {
+                        storageTaskExecutor.commitWithTargetStorageUnitId(physicalTask, migration.getFragmentMeta().getMasterStorageUnitId());
+                    } else {
+                        storageTaskExecutor.commit(physicalTask);
+                    }
 
-                TaskExecuteResult selectResult = physicalTask.getResult();
-                RowStream selectRowStream = selectResult.getRowStream();
+                    TaskExecuteResult selectResult = physicalTask.getResult();
+                    selectRowStream = selectResult.getRowStream();
+                }
 
                 List<String> selectResultPaths = new ArrayList<>();
                 List<DataType> selectResultTypes = new ArrayList<>();
                 selectRowStream.getHeader().getFields().forEach(field -> {
-                    selectResultPaths.add(field.getName());
-                    selectResultTypes.add(field.getType());
+                    if (toMigrateFragment.getTsInterval().isContain(field.getName())) {
+                        logger.error(field.getName());
+                        selectResultPaths.add(field.getName());
+                        selectResultTypes.add(field.getType());
+                    }
                 });
 
                 List<Long> timestampList = new ArrayList<>();
@@ -162,12 +160,16 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                         .getMigrationBatchSize()) {
 //                        migrationService.execute(() -> {
 //                            try {
-//                                insertDataByBatch(timestampList, valuesList, bitmapList, toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
+//                                long startTime = System.currentTimeMillis();
+//                                insertDataByBatch(new ArrayList<>(timestampList), new ArrayList<>(valuesList), new ArrayList<>(bitmapList), toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
+//                                logger.error("insertDataByBatch consumption time : {}", (System.currentTimeMillis() - startTime));
 //                            } catch (PhysicalException e) {
 //                                logger.error("Migration data failure!", e);
 //                            }
 //                        });
+                        long startTime = System.currentTimeMillis();
                         insertDataByBatch(timestampList, valuesList, bitmapList, toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
+                        logger.error("insertDataByBatch consumption time : {}", (System.currentTimeMillis() - startTime));
                         timestampList.clear();
                         valuesList.clear();
                         bitmapList.clear();

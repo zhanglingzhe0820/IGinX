@@ -11,15 +11,13 @@ import java.util.List;
 public class Migration extends AbstractUnaryOperator {
 
     private final FragmentMeta fragmentMeta;
-    private final List<String> paths;
     private final List<StorageUnitMeta> targetReplicaStorageUnitMetaList;
     private final boolean isChangeStorageUnit;
 
     public Migration(GlobalSource source, FragmentMeta fragmentMeta,
-                     List<String> paths, StorageUnitMeta storageUnitMeta) {
+                     StorageUnitMeta storageUnitMeta) {
         super(OperatorType.Migration, source);
         this.fragmentMeta = fragmentMeta;
-        this.paths = paths;
         List<StorageUnitMeta> storageUnitMetaList = new ArrayList<>();
         storageUnitMetaList.add(storageUnitMeta);
         this.targetReplicaStorageUnitMetaList = storageUnitMetaList;
@@ -27,10 +25,9 @@ public class Migration extends AbstractUnaryOperator {
     }
 
     public Migration(GlobalSource source, FragmentMeta fragmentMeta,
-                     List<String> paths, List<StorageUnitMeta> targetReplicaStorageUnitMetaList, boolean isChangeStorageUnit) {
+                     List<StorageUnitMeta> targetReplicaStorageUnitMetaList, boolean isChangeStorageUnit) {
         super(OperatorType.Migration, source);
         this.fragmentMeta = fragmentMeta;
-        this.paths = paths;
         this.targetReplicaStorageUnitMetaList = targetReplicaStorageUnitMetaList;
         this.isChangeStorageUnit = isChangeStorageUnit;
     }
@@ -43,17 +40,13 @@ public class Migration extends AbstractUnaryOperator {
         return targetReplicaStorageUnitMetaList;
     }
 
-    public List<String> getPaths() {
-        return paths;
-    }
-
     public boolean isChangeStorageUnit() {
         return isChangeStorageUnit;
     }
 
     @Override
     public Operator copy() {
-        return new Migration((GlobalSource) getSource().copy(), fragmentMeta, paths, targetReplicaStorageUnitMetaList, isChangeStorageUnit);
+        return new Migration((GlobalSource) getSource().copy(), fragmentMeta, targetReplicaStorageUnitMetaList, isChangeStorageUnit);
     }
 
     @Override

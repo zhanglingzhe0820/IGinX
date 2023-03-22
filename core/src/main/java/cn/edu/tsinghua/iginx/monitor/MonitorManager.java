@@ -30,7 +30,7 @@ public class MonitorManager implements Runnable {
     private final int fragmentClearTime = 10;
     private long currLoopTime = 0;
 
-    private final boolean isAdjustByAverageLatency = false;
+    private final boolean isAdjustByAverageLatency = true;
 
     private boolean isScaleIn = false;
 
@@ -159,10 +159,10 @@ public class MonitorManager implements Runnable {
 
                 metaManager.updateFragmentHeat(filterAndGetHeatMap(writeCostList), filterAndGetHeatMap(readCostList));
                 //等待收集完成
-//                Thread.sleep(1000);
-                while (!metaManager.isAllMonitorsCompleteCollection()) {
-                    Thread.sleep(1000);
-                }
+                Thread.sleep(1000);
+//                while (!metaManager.isAllMonitorsCompleteCollection()) {
+//                    Thread.sleep(1000);
+//                }
 
                 // 为了性能和方便，当前仅第一个节点可进行负载均衡及判断
                 if (DefaultMetaManager.getInstance().getIginxList().get(0).getId() == DefaultMetaManager.getInstance().getIginxId()) {
@@ -198,7 +198,9 @@ public class MonitorManager implements Runnable {
                         for (FragmentMeta fragmentMeta : fragmentMetas) {
                             logger.error("fragment: {}", fragmentMeta.toString());
                             logger.error("fragment heat read: = {}", fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L));
+                            logger.error("fragment requests read: = {}", readRequestsMap.getOrDefault(fragmentMeta, 0L));
                             logger.error("fragment heat write: = {}", fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L));
+                            logger.error("fragment requests write: = {}", writeRequestsMap.getOrDefault(fragmentMeta, 0L));
                             heat += fragmentHeatWriteMap.getOrDefault(fragmentMeta, 0L);
                             heat += fragmentHeatReadMap.getOrDefault(fragmentMeta, 0L);
                             requests += writeRequestsMap.getOrDefault(fragmentMeta, 0L);

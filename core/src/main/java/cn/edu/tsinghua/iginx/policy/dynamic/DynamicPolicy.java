@@ -257,13 +257,16 @@ public class DynamicPolicy implements IPolicy {
         MigrationLogger migrationLogger = new MigrationLogger();
         MigrationManager.getInstance().getMigration().setMigrationLogger(migrationLogger);
 
+        long minHeat = Long.MAX_VALUE;
         // 平均资源占用
         double totalHeat = 0;
         for (long heat : fragmentWriteLoadMap.values()) {
             totalHeat += heat;
+            minHeat = Math.min(minHeat, heat);
         }
         for (long heat : fragmentReadLoadMap.values()) {
             totalHeat += heat;
+            minHeat = Math.min(minHeat, heat);
         }
         int totalFragmentNum = 0;
         Map<Long, Long> nodeLoadMap = new HashMap<>();
@@ -298,6 +301,7 @@ public class DynamicPolicy implements IPolicy {
 
         if (toScaleInNodes.isEmpty()) {
             // 非缩容且无法找到迁移方案的情况，可能是因为分区过大了，则根据序列拆分分区
+//            double maxLoad = minHeat * (1 + config.getUnbalanceFinalStatusThreshold());
             double maxLoad = totalHeat / nodeFragmentMap.size() * (1 + config.getUnbalanceFinalStatusThreshold());
             long maxWriteLoad = 0L;
             FragmentMeta maxWriteLoadFragment = null;

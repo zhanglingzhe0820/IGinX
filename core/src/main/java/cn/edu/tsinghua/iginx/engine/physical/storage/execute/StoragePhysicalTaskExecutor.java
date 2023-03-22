@@ -125,6 +125,7 @@ public class StoragePhysicalTaskExecutor {
                                         HotSpotMonitor.getInstance()
                                             .recordAfter(taskId, task.getTargetFragment(),
                                                 task.getOperators().get(0).getType());
+//                                        logger.error("storageEngine-{} consumption time:{}", task.getTargetFragment().getMasterStorageUnit().getStorageEngineId(), (System.nanoTime() - taskId) / 1000000);
                                         TimeseriesMonitor.getInstance().recordAfter(taskId, result,
                                             task.getOperators().get(0).getType());
                                         RequestsMonitor.getInstance()
@@ -158,7 +159,7 @@ public class StoragePhysicalTaskExecutor {
                                     } else {
                                         StorageUnitMeta masterStorageUnit = task.getTargetFragment().getMasterStorageUnit();
                                         List<String> replicaIds = masterStorageUnit.getReplicas()
-                                                .stream().map(StorageUnitMeta::getId).collect(Collectors.toList());
+                                            .stream().map(StorageUnitMeta::getId).collect(Collectors.toList());
                                         replicaIds.add(masterStorageUnit.getId());
                                         for (String replicaId : replicaIds) {
                                             if (replicaId.equals(task.getStorageUnit())) {
@@ -189,7 +190,7 @@ public class StoragePhysicalTaskExecutor {
         metaManager.registerStorageEngineChangeHook(storageEngineChangeHook);
         metaManager.registerStorageUnitHook(storageUnitHook);
         List<StorageEngineMeta> storages = metaManager.getStorageEngineList();
-        for (StorageEngineMeta storage: storages) {
+        for (StorageEngineMeta storage : storages) {
             if (storage.isHasData()) {
                 storageUnitHook.onChange(null, storage.getDummyStorageUnit());
             }
@@ -221,14 +222,16 @@ public class StoragePhysicalTaskExecutor {
                     }
                     try {
                         List<Timeseries> timeseriesList = pair.k.getTimeSeries();
-                        // fix the schemaPrefix
-                        String schemaPrefix = storage.getSchemaPrefix();
-                        if (schemaPrefix != null) {
-                            for (Timeseries timeseries : timeseriesList) {
-                                timeseries.setPath(schemaPrefix + "." + timeseries.getPath());
+                        if (timeseriesList != null) {
+                            // fix the schemaPrefix
+                            String schemaPrefix = storage.getSchemaPrefix();
+                            if (schemaPrefix != null) {
+                                for (Timeseries timeseries : timeseriesList) {
+                                    timeseries.setPath(schemaPrefix + "." + timeseries.getPath());
+                                }
                             }
+                            timeseriesSet.addAll(timeseriesList);
                         }
-                        timeseriesSet.addAll(timeseriesList);
                     } catch (PhysicalException e) {
                         return new TaskExecuteResult(e);
                     }
@@ -268,7 +271,7 @@ public class StoragePhysicalTaskExecutor {
                     // only need part of data.
                     List<Timeseries> tsList = new ArrayList<>();
                     int cur = 0, size = tsSetAfterFilter.size();
-                    for(Iterator<Timeseries> iter = tsSetAfterFilter.iterator(); iter.hasNext(); cur++) {
+                    for (Iterator<Timeseries> iter = tsSetAfterFilter.iterator(); iter.hasNext(); cur++) {
                         if (cur >= size || cur - offset >= limit) {
                             break;
                         }

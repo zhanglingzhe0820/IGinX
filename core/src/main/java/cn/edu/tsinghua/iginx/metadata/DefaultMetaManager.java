@@ -49,20 +49,16 @@ import cn.edu.tsinghua.iginx.thrift.UserType;
 import cn.edu.tsinghua.iginx.utils.Pair;
 import cn.edu.tsinghua.iginx.utils.SnowFlakeUtils;
 import cn.edu.tsinghua.iginx.utils.StringUtils;
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static cn.edu.tsinghua.iginx.metadata.utils.ReshardStatus.*;
-import static cn.edu.tsinghua.iginx.metadata.utils.ReshardStatus.EXECUTING;
-import static cn.edu.tsinghua.iginx.metadata.utils.ReshardStatus.NON_RESHARDING;
 
 public class DefaultMetaManager implements IMetaManager {
 
