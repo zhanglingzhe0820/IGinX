@@ -30,7 +30,7 @@ public class MonitorManager implements Runnable {
     private final int fragmentClearTime = 10;
     private long currLoopTime = 0;
 
-    private final boolean isAdjustByAverageLatency = true;
+    private final boolean isAdjustByAverageLatency = false;
 
     private boolean isScaleIn = false;
 
