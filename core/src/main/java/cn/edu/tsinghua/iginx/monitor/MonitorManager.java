@@ -270,9 +270,13 @@ public class MonitorManager implements Runnable {
                                             Map<Long, List<FragmentMeta>> fragmentOfEachNode,
                                             Map<FragmentMeta, Long> fragmentHeatWriteMap,
                                             Map<FragmentMeta, Long> fragmentHeatReadMap) {
+        long maxLatencyNode = 0;
         double maxLatency = 0;
-        for (Double latency : nodeLatencyMap.values()) {
-            maxLatency = Math.max(maxLatency, latency);
+        for (Entry<Long, Double> nodeLatencyEntry : nodeLatencyMap.entrySet()) {
+            if (nodeLatencyEntry.getValue() > maxLatency) {
+                maxLatencyNode = nodeLatencyEntry.getKey();
+            }
+            maxLatency = Math.max(maxLatency, nodeLatencyEntry.getValue());
         }
 
         for (Entry<Long, List<FragmentMeta>> fragmentOfEachNodeEntry : fragmentOfEachNode.entrySet()) {

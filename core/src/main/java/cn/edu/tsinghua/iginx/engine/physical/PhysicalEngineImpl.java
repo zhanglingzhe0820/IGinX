@@ -129,7 +129,6 @@ public class PhysicalEngineImpl implements PhysicalEngine {
                 List<DataType> selectResultTypes = new ArrayList<>();
                 selectRowStream.getHeader().getFields().forEach(field -> {
                     if (toMigrateFragment.getTsInterval().isContain(field.getName())) {
-                        logger.error(field.getName());
                         selectResultPaths.add(field.getName());
                         selectResultTypes.add(field.getType());
                     }
@@ -169,7 +168,6 @@ public class PhysicalEngineImpl implements PhysicalEngine {
 //                        });
                         long startTime = System.currentTimeMillis();
                         insertDataByBatch(timestampList, valuesList, bitmapList, toMigrateFragment, selectResultPaths, selectResultTypes, storageUnitIds);
-                        logger.error("insertDataByBatch consumption time : {}", (System.currentTimeMillis() - startTime));
                         timestampList.clear();
                         valuesList.clear();
                         bitmapList.clear();
