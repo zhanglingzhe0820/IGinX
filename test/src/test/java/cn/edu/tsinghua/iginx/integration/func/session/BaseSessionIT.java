@@ -187,6 +187,7 @@ public class BaseSessionIT extends BaseSessionConcurrencyIT {
     @Test
     public void sessionTest() throws ExecutionException, SessionException, InterruptedException {
         int simpleLen = 2;
+        System.out.println("test");
         List<String> paths = getPaths(currPath, simpleLen);
         //Simple Test(Including query,valueFilter,aggr:max/min/first/last/count/sum/avg)
         insertTestsByFourInterfaces();
