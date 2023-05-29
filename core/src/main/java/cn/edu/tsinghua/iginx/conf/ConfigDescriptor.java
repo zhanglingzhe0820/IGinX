@@ -75,6 +75,7 @@ public class ConfigDescriptor {
             config.setEnableDynamicMigration(Boolean.parseBoolean(properties.getProperty("enableDynamicMigration", "true")));
             config.setLoadBalanceCheckInterval(Integer.parseInt(properties.getProperty("loadBalanceCheckInterval", "30")));
             config.setUnbalanceThreshold(Double.parseDouble(properties.getProperty("unbalanceThreshold", "0.1")));
+            config.setHeuristicUnbalanceThreshold(Double.parseDouble(properties.getProperty("heuristicUnbalanceThreshold", "0.8")));
             config.setUnbalanceFinalStatusThreshold(Double.parseDouble(properties.getProperty("unbalanceFinalStatusThreshold", "0.5")));
             config.setMaxLoadThreshold(Double.parseDouble(properties.getProperty("maxLoadThreshold", String.valueOf(Runtime.getRuntime().availableProcessors() * config.getLoadBalanceCheckInterval() * 1000 * 0.8))));
             config.setMigrationBatchSize(Long.parseLong(properties.getProperty("migrationBatchSize", "100")));

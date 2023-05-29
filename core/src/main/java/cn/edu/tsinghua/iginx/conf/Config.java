@@ -75,6 +75,8 @@ public class Config {
 
     private double unbalanceThreshold = 0.1;
 
+    private double heuristicUnbalanceThreshold = 0.8;
+
     private double unbalanceFinalStatusThreshold = 0.5;
 
     private double maxLoadThreshold = Runtime.getRuntime().availableProcessors() * loadBalanceCheckInterval * 10000 * 0.8;
@@ -431,6 +433,14 @@ public class Config {
 
     public void setUnbalanceThreshold(double unbalanceThreshold) {
         this.unbalanceThreshold = unbalanceThreshold;
+    }
+
+    public double getHeuristicUnbalanceThreshold() {
+        return heuristicUnbalanceThreshold;
+    }
+
+    public void setHeuristicUnbalanceThreshold(double heuristicUnbalanceThreshold) {
+        this.heuristicUnbalanceThreshold = heuristicUnbalanceThreshold;
     }
 
     public double getUnbalanceFinalStatusThreshold() {
